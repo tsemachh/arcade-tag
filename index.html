@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Arcade Tag — Phase 1 MVP</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #111; display: flex;
+                 align-items: center; justify-content: center; overflow: hidden; }
+    canvas { background: #000; box-shadow: 0 0 24px rgba(0,0,0,.8);
+             width: min(98vw, 800px); max-height: 96vh; height: auto;
+             touch-action: none; }
+  </style>
+</head>
+<body>
+  <canvas id="arena" width="800" height="520"></canvas>
+  <script src="game-core.js"></script>
+  <script src="ai.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
