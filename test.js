@@ -199,7 +199,8 @@ console.log('AI integration: chaser catches a naive straight runner');
 
 console.log('AI integration: runner evades a direct-seek chaser');
 {
-  const g = playingGame({ roundSeconds: 8 });
+  // powerupIntervalS pushed out so a random spawn cannot alter this duel
+  const g = playingGame({ roundSeconds: 8, powerupIntervalS: 999 });
   let steps = 0, caught = false;
   while (g.state === State.PLAYING && steps < 60 * 10) {
     // scripted chaser: always seek the runner's current position (same speed)
@@ -240,6 +241,239 @@ console.log('resetMatch returns to menu with settings-independent state cleared'
   assert(g.state === State.READY, 'back to READY');
   assert(g.scores[0] === 0 && g.scores[1] === 0, 'scores cleared');
   assert(g.round === 0 && g.lastRoundResult === null, 'round counter and result cleared');
+}
+
+// ===================== Phase 2: power-ups =====================
+
+console.log('power-ups: deterministic spawn (interval, margin, max cap)');
+{
+  const g = playingGame({ powerupIntervalS: 0.5, rand: () => 0.5 });
+  assert(g.powerups.length === 0, 'no power-up before the interval elapses');
+  g.step(0.6);
+  assert(g.powerups.length === 1, 'one power-up spawns after the interval');
+  const pu = g.powerups[0];
+  assert(pu.x >= 60 && pu.x <= CONFIG.width - 60 && pu.y >= 60 && pu.y <= CONFIG.height - 60,
+    'spawn keeps a 60px margin from the walls');
+  assert(pu.type === 'freeze', 'rand=0.5 deterministically picks the middle type');
+}
+{
+  // park both players in corners so nothing gets picked up, spawn aggressively
+  const g = playingGame({ powerupIntervalS: 0.1, rand: () => 0.5, roundSeconds: 9999 });
+  g.players[0].setDirection(-1, -1); g.players[1].setDirection(1, 1);
+  for (let i = 0; i < 120; i++) g.step(1 / 60); // 2s → many spawn opportunities
+  assert(g.powerups.length === CONFIG.maxPowerups, 'field never exceeds maxPowerups');
+  const g2 = playingGame({ rand: () => 0.5 });
+  g2.startRound();
+  assert(g2.powerups.length === 0, 'powerups cleared at round start');
+}
+
+console.log('power-ups: dash pickup, speed boost, expiry');
+{
+  const g = playingGame({ rand: () => 0.5 });
+  const p = g.players[0]; // at (160, 260) heading right
+  g.powerups.push({ x: p.x + 20, y: p.y, type: 'dash' });
+  g.step(0.1); // moves 15px → within pickup range
+  assert(g.powerups.length === 0, 'power-up consumed on contact');
+  assert(approx(p.fx.dash, CONFIG.dashSeconds), 'dash effect set to dashSeconds');
+  assert(g.lastEvent && g.lastEvent.type === 'pickup', 'pickup sets lastEvent');
+  const x0 = p.x;
+  g.step(0.1);
+  assert(approx(p.x - x0, CONFIG.speed * CONFIG.dashMult * 0.1, 1e-6),
+    'dash multiplies movement speed');
+  assert(p.fx.dash < CONFIG.dashSeconds, 'dash timer ticks down');
+  // steer the players apart so a catch cannot end the round mid-test
+  g.players[0].setDirection(0, 1); g.players[1].setDirection(0, -1);
+  for (let i = 0; i < 30; i++) g.step(0.1); // 3s ≫ dashSeconds
+  assert(p.fx.dash === 0, 'dash expires to exactly 0');
+  assert(approx(p.speedFactor(g.cfg), 1), 'speed factor returns to 1 after expiry');
+}
+
+console.log('power-ups: freeze slows every OTHER player');
+{
+  const g = playingGame({ rand: () => 0.5 });
+  const p = g.players[0], q = g.players[1];
+  g.powerups.push({ x: p.x + 20, y: p.y, type: 'freeze' });
+  g.step(0.1);
+  assert(approx(q.fx.slow, CONFIG.freezeSeconds), 'opponent gets slowed');
+  assert(p.fx.slow === 0, 'collector is not slowed');
+  const qx = q.x;
+  g.step(0.1); // q heads (-1, 0)
+  assert(approx(qx - q.x, CONFIG.speed * CONFIG.freezeMult * 0.1, 1e-6),
+    'frozen player moves at freezeMult speed');
+  assert(approx(p.speedFactor(Object.assign({}, CONFIG)), 1) &&
+    (p.fx.dash = 1, p.fx.slow = 1, approx(p.speedFactor(CONFIG), CONFIG.dashMult * CONFIG.freezeMult)),
+    'dash and slow multiply together');
+}
+
+console.log('power-ups: ghost stops trail recording, then resumes');
+{
+  const g = playingGame({ rand: () => 0.5, roundSeconds: 9999 });
+  const p = g.players[0];
+  g.powerups.push({ x: p.x + 20, y: p.y, type: 'ghost' });
+  g.step(0.1);
+  assert(approx(p.fx.ghost, CONFIG.ghostSeconds), 'ghost effect set on pickup');
+  const len = p.trail.length;
+  g.step(0.5); // moves 75px — would normally lay many points
+  assert(p.trail.length === len, 'no trail points recorded while ghosting');
+  // steer the players apart so a catch cannot end the round mid-test
+  g.players[0].setDirection(0, 1); g.players[1].setDirection(0, -1);
+  for (let i = 0; i < 5; i++) g.step(0.5); // ghost expires
+  assert(p.fx.ghost === 0, 'ghost expires');
+  assert(p.trail.length > len, 'trail recording resumes after ghost ends');
+}
+
+console.log('AI: ghosting foe kills prediction lead (and stays deterministic)');
+{
+  const g = playingGame();
+  g.players[0].x = 200; g.players[0].y = 260;
+  g.players[1].x = 500; g.players[1].y = 260; g.players[1].setDirection(0, 1);
+  const [nx, ny] = computeAIDirection(g, 0, null, fixedRand);
+  assert(ny > 0.05, 'baseline: chaser leads a visible runner');
+  g.players[1].fx.ghost = 1.0;
+  const [ax, ay] = computeAIDirection(g, 0, null, fixedRand);
+  assert(Math.abs(ay) < 1e-9, 'ghosted foe → zero prediction lead');
+  assert(ax > 0.99, 'chaser still heads at the last known position');
+}
+
+console.log('lastEvent: catch midpoint and timeout runner position');
+{
+  const g = playingGame();
+  g.players[0].x = 400; g.players[0].y = 250;
+  g.players[1].x = 410; g.players[1].y = 250;
+  g.step(0.001);
+  assert(g.lastEvent && g.lastEvent.type === 'catch', 'catch sets lastEvent.type');
+  assert(approx(g.lastEvent.x, 405, 1) && approx(g.lastEvent.y, 250, 1),
+    'catch event at the midpoint of the two players');
+  assert(typeof g.lastEvent.time === 'number', 'event carries a timestamp');
+  const g2 = playingGame({ roundSeconds: 0.1 });
+  g2.step(0.2);
+  assert(g2.lastEvent && g2.lastEvent.type === 'timeout', 'timeout sets lastEvent.type');
+  assert(approx(g2.lastEvent.x, g2.players[1].x, 1e-6), 'timeout event at the runner position');
+}
+
+// ===================== Phase 2: game modes =====================
+
+console.log('modes: classic stays a 2-player game (default mode)');
+{
+  const g = new Game();
+  assert(g.mode === 'classic', 'default mode is classic');
+  assert(g.players.length === 2, 'classic has 2 players');
+  assert(approx(g.players[0].x, CONFIG.width * 0.2, 1e-6) &&
+    approx(g.players[1].x, CONFIG.width * 0.8, 1e-6),
+    'classic spawn spots unchanged (0.2w / 0.8w)');
+}
+
+console.log('koth: zone placement, accrual, win, relocation, timeout, no catch');
+{
+  const g = playingGame({ mode: 'koth', rand: () => 0.5, kothMoveSeconds: 999 });
+  assert(g.players.length === 2, 'koth is a 2-player mode');
+  assert(g.zone && g.zone.x >= 100 && g.zone.x <= CONFIG.width - 100 &&
+    g.zone.y >= 100 && g.zone.y <= CONFIG.height - 100,
+    'zone placed with a 100px margin at round start');
+  g.players[0].x = g.zone.x; g.players[0].y = g.zone.y;
+  g.step(0.1);
+  assert(approx(g.zoneScore[0], 0.1, 1e-6), 'zone time accrues for a player inside');
+  assert(g.zoneScore[1] === 0, 'no accrual for a player outside the zone');
+}
+{
+  const g = playingGame({ mode: 'koth', rand: () => 0.5, kothMoveSeconds: 999, kothWinSeconds: 0.5 });
+  let n = 0;
+  while (g.state === State.PLAYING && n < 200) {
+    g.players[0].x = g.zone.x; g.players[0].y = g.zone.y; // pin P1 on the hill
+    g.step(1 / 60); n++;
+  }
+  assert(g.state === State.ROUND_OVER, 'koth round ends when kothWinSeconds accrued');
+  assert(g.lastRoundResult.winnerIndex === 0 && g.lastRoundResult.reason === 'zone',
+    'zone holder wins with reason=zone');
+  assert(g.lastEvent.type === 'zone', 'zone win sets lastEvent');
+}
+{
+  let i = 0; const vals = [0.2, 0.3, 0.7, 0.8];
+  const g = playingGame({ mode: 'koth', kothMoveSeconds: 0.5, rand: () => vals[i++ % vals.length] });
+  const z0 = { x: g.zone.x, y: g.zone.y };
+  for (let k = 0; k < 36; k++) g.step(1 / 60); // 0.6s > kothMoveSeconds
+  assert(g.zone.x !== z0.x || g.zone.y !== z0.y, 'zone relocates every kothMoveSeconds');
+}
+{
+  const g = playingGame({ mode: 'koth', rand: () => 0.5, roundSeconds: 0.5, kothWinSeconds: 999 });
+  g.zoneScore[0] = 1; g.zoneScore[1] = 3;
+  g.step(0.6);
+  assert(g.state === State.ROUND_OVER && g.lastRoundResult.reason === 'timeout',
+    'koth timer cap resolves the round');
+  assert(g.lastRoundResult.winnerIndex === 1, 'highest zoneScore wins the timeout');
+}
+{
+  const g = playingGame({ mode: 'koth', rand: () => 0.5 });
+  g.players[0].x = 300; g.players[0].y = 100;
+  g.players[1].x = 305; g.players[1].y = 100;
+  g.step(0.01);
+  assert(g.state === State.PLAYING, 'touching an opponent never ends a koth round (no catch)');
+}
+
+console.log('infection: 4 players, spawn ring, initial infected rotation');
+{
+  const g = playingGame({ mode: 'infection' });
+  assert(g.players.length === 4, 'infection spawns 4 players');
+  assert(g.scores.length === 4, 'scores track 4 players');
+  assert(g.infected.filter(Boolean).length === 1 && g.infected[g.chaserIndex] === true,
+    'exactly one initial infected (the rotating chaserIndex)');
+  assert(g.chaserIndex === 0, 'round 1 starts with player 0 infected');
+  assert(g.players.every(p =>
+    p.x >= CONFIG.playerRadius && p.x <= CONFIG.width - CONFIG.playerRadius &&
+    p.y >= CONFIG.playerRadius && p.y <= CONFIG.height - CONFIG.playerRadius),
+    '4-player spawn positions are inside the arena');
+  const distinct = new Set(g.players.map(p => `${Math.round(p.x)},${Math.round(p.y)}`));
+  assert(distinct.size === 4, 'spawn positions are distinct (evenly spaced ellipse)');
+}
+
+console.log('infection: touch spreads, last healthy player survives');
+{
+  const g = playingGame({ mode: 'infection' });
+  g.players[1].x = g.players[0].x + 5; g.players[1].y = g.players[0].y;
+  g.step(0.001);
+  assert(g.infected[1] === true, 'infected touch infects a healthy player');
+  assert(g.state === State.PLAYING, 'round continues while 2+ healthy remain');
+  assert(g.lastEvent.type === 'infect', 'infection sets lastEvent {type:infect}');
+  g.players[2].x = g.players[0].x; g.players[2].y = g.players[0].y;
+  g.step(0.001);
+  assert(g.infected[2] === true, 'second infection lands');
+  assert(g.state === State.ROUND_OVER, 'round ends when exactly one healthy remains');
+  assert(g.lastRoundResult.winnerIndex === 3 && g.lastRoundResult.reason === 'survivor',
+    'last healthy player wins with reason=survivor');
+  assert(g.scores[3] === 1, 'survivor takes the point');
+  g.startRound(); g.step(3.01);
+  assert(g.chaserIndex === 1 && g.infected[1] === true && g.infected[0] === false,
+    'round 2 rotates the initial infected to player 1');
+}
+
+console.log('infection: timeout — farthest healthy player from any infected wins');
+{
+  const g = playingGame({ mode: 'infection', roundSeconds: 0.5 });
+  g.players[0].x = 100; g.players[0].y = 100; // infected
+  g.players[1].x = 150; g.players[1].y = 100; // healthy, close
+  g.players[3].x = 300; g.players[3].y = 100; // healthy, mid
+  g.players[2].x = 700; g.players[2].y = 300; // healthy, far
+  for (const p of g.players) p.setDirection(0, 1); // all drift the same way
+  g.step(0.6);
+  assert(g.state === State.ROUND_OVER && g.lastRoundResult.reason === 'timeout',
+    'infection round resolves on timeout');
+  assert(g.lastRoundResult.winnerIndex === 2,
+    'winner is the healthy player farthest from the nearest infected');
+}
+
+console.log('AI: explicit target {foeIndex, role} drives multi-player steering');
+{
+  const g = playingGame({ mode: 'infection' });
+  // player 0 at (160, 260), player 2 at (640, 260)
+  const [cx] = computeAIDirection(g, 0, null, fixedRand, { foeIndex: 2, role: 'chase' });
+  assert(cx > 0.9, 'chase role heads toward the chosen foe');
+  const [fx] = computeAIDirection(g, 0, null, fixedRand, { foeIndex: 2, role: 'flee' });
+  assert(fx < -0.5, 'flee role heads away from the chosen foe');
+  const g2 = playingGame();
+  g2.players[1].setDirection(0, 1);
+  const a = computeAIDirection(g2, 0, null, fixedRand);
+  const b = computeAIDirection(g2, 0, null, fixedRand, { foeIndex: 1, role: 'chase' });
+  assert(a[0] === b[0] && a[1] === b[1], 'default target reproduces the classic behavior');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

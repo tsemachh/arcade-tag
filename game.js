@@ -1,12 +1,15 @@
 /**
- * arcade-tag — Phase 1 MVP browser layer: rendering, input, adaptive audio.
+ * arcade-tag — browser layer: rendering, input, adaptive audio.
  * Audio: Web Audio square-wave ostinato (POKEY homage). Note rate + pitch
  * are driven directly by the Euclidean distance between the two players.
- * Visuals: both players share one hue-cycling color; trail segments keep
+ * Visuals: all players share one hue-cycling color; trail segments keep
  * the hue they were laid down with (persistent rainbow); player heads are
- * the live tip of the line; a white ring marks the chaser.
+ * the live tip of the line; a white ring marks the chaser (classic mode).
  * Input: keyboard (P1 WASD, P2 arrows), tap-to-select menus, and a
  * floating virtual touch joystick for P1 (spec section 9.1).
+ * Phase 2: catch-moment effects (flash / rings / particle rays),
+ * power-ups (dash / freeze / ghost), and game modes (classic / koth /
+ * infection) selectable from the menu.
  */
 (function () {
   'use strict';
@@ -15,13 +18,38 @@
 
   const canvas = document.getElementById('arena');
   const ctx = canvas.getContext('2d');
-  const game = new Game({ width: canvas.width, height: canvas.height });
-  window.__game = game; // exposed for automated verification
 
   // ---------- settings (start-screen selectable) ----------
-  const settings = { aiMode: true, difficulty: 'medium', speed: 'normal' };
+  const settings = { aiMode: true, difficulty: 'medium', speed: 'normal', gameMode: 'classic' };
   window.__settings = settings; // verification hook
+
+  function makeGame() {
+    return new Game({ width: canvas.width, height: canvas.height, mode: settings.gameMode });
+  }
+  let game = makeGame();
+  window.__game = game; // exposed for automated verification
+
+  /** Rebuild the Game when the selected mode differs (fresh 0:0 match). */
+  function syncMode() {
+    if (game.mode === settings.gameMode) return;
+    game = makeGame();
+    window.__game = game;
+    effects = [];
+    seenEvent = null;
+    prevState = game.state;
+  }
+  window.__setMode = function (m) { // verification hook
+    if (m !== 'classic' && m !== 'koth' && m !== 'infection') return;
+    settings.gameMode = m;
+    if (m === 'infection') settings.aiMode = true; // infection is vs-computer only
+    syncMode();
+  };
+
   function p2Name() { return settings.aiMode ? 'המחשב' : 'שחקן 2'; }
+  function playerName(i) {
+    if (game.players.length > 2) return i === 0 ? 'שחקן 1' : `מחשב ${i + 1}`;
+    return i === 0 ? 'שחקן 1' : p2Name();
+  }
   function applySpeed() { game.cfg.speed = SPEEDS[settings.speed]; }
 
   let aiTimer = 0;
@@ -42,6 +70,7 @@
 
   function advanceState() {
     audio.ensureStarted();
+    if (game.state === State.READY) syncMode();
     if (game.state === State.READY || game.state === State.ROUND_OVER) { applySpeed(); game.startRound(); }
     else if (game.state === State.MATCH_OVER) { game.resetMatch(); }
   }
@@ -51,7 +80,7 @@
     if (e.code === 'Escape') { game.resetMatch(); return; } // back to menu anytime
     if (e.code === 'KeyM') { audio.muted = !audio.muted; return; }
     if (game.state === State.READY && (e.code === 'Digit1' || e.code === 'Digit2')) {
-      settings.aiMode = e.code === 'Digit1';
+      settings.aiMode = e.code === 'Digit1' || settings.gameMode === 'infection';
       return;
     }
     keys.add(e.code);
@@ -155,12 +184,82 @@
     },
   };
 
+  // ---------- event effects (catch / infect / pickup) ----------
+  let effects = [];   // {kind: 'boom'|'pop', x, y, t} — t is a local clock (s)
+  let seenEvent = null;
+
+  function spawnEffect(ev) {
+    if (!ev) return;
+    effects.push({ kind: ev.type === 'pickup' ? 'pop' : 'boom', x: ev.x, y: ev.y, t: 0 });
+  }
+
+  function drawEffects(dt) {
+    for (const e of effects) e.t += dt;
+    effects = effects.filter(e => e.t < (e.kind === 'boom' ? 1.0 : 0.45));
+    for (const e of effects) {
+      if (e.kind === 'boom') {
+        // brief white screen flash
+        if (e.t < 0.25) {
+          ctx.fillStyle = `rgba(255,255,255,${(0.45 * (1 - e.t / 0.25)).toFixed(3)})`;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+        // expanding glowing rings
+        for (let r = 0; r < 3; r++) {
+          const rt = (e.t - r * 0.08) / 0.9;
+          if (rt <= 0 || rt >= 1) continue;
+          ctx.save();
+          ctx.globalAlpha = 1 - rt;
+          ctx.strokeStyle = '#ffffff';
+          ctx.shadowColor = colorAt(game.time);
+          ctx.shadowBlur = 14;
+          ctx.lineWidth = 3 - 2 * rt;
+          ctx.beginPath();
+          ctx.arc(e.x, e.y, 10 + rt * (90 + r * 30), 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+        // 16 particle rays at deterministic angles, slight per-index speed variation
+        const pt = e.t / 0.8;
+        if (pt < 1) {
+          ctx.save();
+          ctx.globalAlpha = 1 - pt;
+          for (let i = 0; i < 16; i++) {
+            const a = (i / 16) * Math.PI * 2;
+            const sp = 150 + (i % 4) * 35;
+            const px = e.x + Math.cos(a) * sp * e.t;
+            const py = e.y + Math.sin(a) * sp * e.t;
+            ctx.fillStyle = colorAt(game.time + i * 0.4);
+            ctx.beginPath();
+            ctx.arc(px, py, 2.5 * (1 - pt) + 0.5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.restore();
+        }
+      } else { // pickup pop
+        const rt = e.t / 0.45;
+        ctx.save();
+        ctx.globalAlpha = 1 - rt;
+        ctx.strokeStyle = '#ffffff';
+        ctx.shadowColor = colorAt(game.time);
+        ctx.shadowBlur = 10;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, 6 + rt * 26, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+  }
+
   // ---------- rendering ----------
   /** Hue at a given game time (seconds). 40°/s → full cycle every 9s. */
   function hueAt(t) { return (t * 40) % 360; }
   function colorAt(t) { return `hsl(${hueAt(t)}, 100%, 55%)`; }
 
-  function drawPlayer(p, isChaser) {
+  const RING_COLORS = { chaser: '#ffffff', infected: '#ff5555', safe: '#66ff99' };
+
+  /** ring: null | 'chaser' | 'infected' | 'safe' */
+  function drawPlayer(p, ring) {
     const color = colorAt(game.time);
     ctx.lineWidth = game.cfg.trailWidth;
     ctx.lineJoin = 'round';
@@ -173,6 +272,7 @@
       ctx.lineTo(t[i].x, t[i].y);
       ctx.stroke();
     }
+    if (p.fx && p.fx.ghost > 0) return; // ghosting: no head, no live tip
     if (t.length) {
       ctx.strokeStyle = color;
       ctx.beginPath();
@@ -187,14 +287,75 @@
     ctx.beginPath();
     ctx.arc(p.x, p.y, game.cfg.trailWidth / 2 + 0.5, 0, Math.PI * 2);
     ctx.fill();
-    if (isChaser) {
-      ctx.shadowColor = '#ffffff';
-      ctx.strokeStyle = '#ffffff';
+    if (ring) {
+      const rc = RING_COLORS[ring] || '#ffffff';
+      ctx.shadowColor = rc;
+      ctx.strokeStyle = rc;
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.arc(p.x, p.y, game.cfg.trailWidth / 2 + 5, 0, Math.PI * 2);
       ctx.stroke();
     }
+    ctx.restore();
+  }
+
+  function ringFor(i) {
+    if (game.mode === 'infection') return game.infected[i] ? 'infected' : 'safe';
+    if (game.mode === 'koth') return null; // no roles on the hill
+    return i === game.chaserIndex ? 'chaser' : null;
+  }
+
+  const POWERUP_STYLE = {
+    dash:   { color: '#ffd633', glyph: '⚡' },
+    freeze: { color: '#44ddff', glyph: '❄' },
+    ghost:  { color: '#bb66ff', glyph: '👻' },
+  };
+
+  function drawPowerups() {
+    for (const pu of game.powerups) {
+      const s = POWERUP_STYLE[pu.type];
+      const r = game.cfg.powerupRadius + 2;
+      ctx.save();
+      ctx.translate(pu.x, pu.y);
+      ctx.rotate(game.time * 2); // rotating glowing diamond
+      ctx.shadowColor = s.color;
+      ctx.shadowBlur = 14;
+      ctx.strokeStyle = s.color;
+      ctx.lineWidth = 2;
+      ctx.fillStyle = 'rgba(0,0,0,0.65)';
+      ctx.beginPath();
+      ctx.moveTo(0, -r); ctx.lineTo(r, 0); ctx.lineTo(0, r); ctx.lineTo(-r, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+      ctx.save();
+      ctx.shadowColor = s.color;
+      ctx.shadowBlur = 8;
+      ctx.fillStyle = s.color;
+      ctx.font = '11px "Helvetica Neue", Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(s.glyph, pu.x, pu.y + 1);
+      ctx.restore();
+    }
+  }
+
+  function drawZone() {
+    if (game.mode !== 'koth' || !game.zone) return;
+    const z = game.zone, R = game.cfg.kothZoneRadius;
+    const pulse = 1 + 0.05 * Math.sin(game.time * 4);
+    ctx.save();
+    ctx.shadowColor = colorAt(game.time);
+    ctx.shadowBlur = 18;
+    ctx.strokeStyle = colorAt(game.time);
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(z.x, z.y, R * pulse, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 0.07;
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
     ctx.restore();
   }
 
@@ -228,7 +389,7 @@
     ctx.stroke();
     ctx.shadowBlur = 0;
     ctx.fillStyle = selected ? '#ffffff' : '#bbbbbb';
-    ctx.font = '16px "Helvetica Neue", Arial, sans-serif';
+    ctx.font = '15px "Helvetica Neue", Arial, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.direction = 'rtl';
@@ -238,9 +399,9 @@
   }
 
   /** A row of mutually exclusive options, drawn right-to-left. */
-  function drawChoiceRow(rowLabel, options, selectedKey, y, onPick) {
+  function drawChoiceRow(rowLabel, options, selectedKey, y, onPick, btnW) {
     centerText(rowLabel, y - 7, 13, '#888888'); // label above the row
-    const w = 92, h = 30, gap = 10;
+    const w = btnW || 92, h = 30, gap = 10;
     const total = options.length * w + (options.length - 1) * gap;
     let cx = canvas.width / 2 + total / 2 - w / 2; // rightmost first (RTL)
     for (const opt of options) {
@@ -253,42 +414,55 @@
     buttons = [];
     ctx.save();
     ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 18;
-    centerText('תופסת ארקייד', 78, 40);
+    centerText('תופסת ארקייד', 70, 38);
     ctx.restore();
-    centerText('הרודף (טבעת לבנה) מנסה לתפוס את הבורח לפני שנגמר הזמן.', 118, 16);
-    centerText('תפיסה = נקודה לרודף · נגמר הזמן = נקודה לבורח · ראשון ל־3 מנצח.', 142, 16);
-    centerText('השובלים צבעוניים בלבד — מותר לחצות אותם. הסאונד מאיץ כשהמרחק מתקצר!', 166, 16);
+    centerText('הרודף (טבעת לבנה) מנסה לתפוס את הבורח לפני שנגמר הזמן.', 106, 15);
+    centerText('תפיסה = נקודה לרודף · נגמר הזמן = נקודה לבורח · ראשון ל־3 מנצח.', 128, 15);
+    centerText('השובלים צבעוניים בלבד — מותר לחצות אותם. הסאונד מאיץ כשהמרחק מתקצר!', 150, 15);
 
-    drawChoiceRow('מצב משחק', [
-      { key: true, label: 'נגד המחשב' },
-      { key: false, label: 'שני שחקנים' },
-    ], settings.aiMode, 212, (k) => { settings.aiMode = k; });
+    drawChoiceRow('סוג משחק', [
+      { key: 'classic', label: 'קלאסי' },
+      { key: 'koth', label: 'מלך הגבעה' },
+      { key: 'infection', label: 'הדבקה' },
+    ], settings.gameMode, 188, (k) => {
+      settings.gameMode = k;
+      if (k === 'infection') settings.aiMode = true;
+      syncMode();
+    }, 104);
+
+    if (settings.gameMode !== 'infection') {
+      drawChoiceRow('מצב משחק', [
+        { key: true, label: 'נגד המחשב' },
+        { key: false, label: 'שני שחקנים' },
+      ], settings.aiMode, 240, (k) => { settings.aiMode = k; });
+    }
 
     if (settings.aiMode) {
       drawChoiceRow('רמת קושי', [
         { key: 'easy', label: 'קל' },
         { key: 'medium', label: 'בינוני' },
         { key: 'hard', label: 'קשה' },
-      ], settings.difficulty, 274, (k) => { settings.difficulty = k; });
+      ], settings.difficulty, 292, (k) => { settings.difficulty = k; });
     }
 
     drawChoiceRow('מהירות', [
       { key: 'slow', label: 'איטי' },
       { key: 'normal', label: 'רגיל' },
       { key: 'fast', label: 'מהיר' },
-    ], settings.speed, 336, (k) => { settings.speed = k; });
+    ], settings.speed, 344, (k) => { settings.speed = k; });
 
     // start button
     ctx.save();
     ctx.shadowColor = colorAt(game.time);
     ctx.shadowBlur = 16;
-    drawButton('התחל משחק', canvas.width / 2, 392, 180, 44, true, advanceState);
+    drawButton('התחל משחק', canvas.width / 2, 398, 180, 44, true, advanceState);
     ctx.restore();
 
+    centerText('בונוסים: ⚡ האצה · ❄ הקפאת יריב · 👻 היעלמות', 470, 14, '#aaaaaa');
     centerText(settings.aiMode
       ? 'שחקן 1 — W,A,S,D או מגע · רווח להתחלה · M להשתקה'
       : 'שחקן 1 — W,A,S,D · שחקן 2 — חצים · רווח להתחלה · M להשתקה',
-      472, 14, '#888888');
+      494, 13, '#888888');
   }
 
   function drawJoystick() {
@@ -311,7 +485,42 @@
     ctx.restore();
   }
 
-  function draw() {
+  function drawHud() {
+    ctx.font = '16px "Helvetica Neue", Arial, sans-serif';
+    ctx.fillStyle = '#ffffff';
+    if (game.mode === 'koth') {
+      const win = game.cfg.kothWinSeconds;
+      ctx.textAlign = 'left';
+      ctx.fillText(`P1 ${Math.floor(game.zoneScore[0])}/${win} · ${game.scores[0]}`, 14, 24);
+      ctx.textAlign = 'right';
+      ctx.fillText(`${game.scores[1]} · ${Math.floor(game.zoneScore[1])}/${win} P2`, canvas.width - 14, 24);
+    } else if (game.mode === 'infection') {
+      ctx.textAlign = 'left';
+      ctx.fillText(game.scores.map((s, i) => `P${i + 1} ${s}`).join(' · '), 14, 24);
+      const healthy = game.infected.filter(v => !v).length;
+      ctx.save();
+      ctx.textAlign = 'right';
+      ctx.direction = 'rtl';
+      ctx.fillText(`בריאים: ${healthy}`, canvas.width - 14, 24);
+      ctx.restore();
+    } else {
+      ctx.textAlign = 'left';
+      ctx.fillText(`P1 ${game.scores[0]}`, 14, 24);
+      ctx.textAlign = 'right';
+      ctx.fillText(`${game.scores[1]} P2`, canvas.width - 14, 24);
+    }
+  }
+
+  function countdownLabel() {
+    if (game.mode === 'koth') return 'שלטו באזור!';
+    if (game.mode === 'infection') return `${playerName(game.chaserIndex)} מתחיל נגוע — ברחו!`;
+    const chaserName = playerName(game.chaserIndex);
+    const runnerName = playerName(1 - game.chaserIndex);
+    return `${chaserName} רודף את ${runnerName}`;
+  }
+
+  function draw(frameDt) {
+    const dt = frameDt || 0;
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     const { closeness } = game.audioParams();
@@ -320,15 +529,12 @@
     ctx.strokeRect(1, 1, canvas.width - 2, canvas.height - 2);
 
     if (game.state !== State.READY) {
-      game.players.forEach((p, i) => drawPlayer(p, i === game.chaserIndex));
+      drawZone();
+      drawPowerups();
+      game.players.forEach((p, i) => drawPlayer(p, ringFor(i)));
     }
 
-    ctx.font = '16px "Helvetica Neue", Arial, sans-serif';
-    ctx.fillStyle = '#ffffff';
-    ctx.textAlign = 'left';
-    ctx.fillText(`P1 ${game.scores[0]}`, 14, 24);
-    ctx.textAlign = 'right';
-    ctx.fillText(`${game.scores[1]} P2`, canvas.width - 14, 24);
+    drawHud();
 
     if (game.state === State.PLAYING) {
       // prominent round timer — pulses red when time is almost up
@@ -365,8 +571,6 @@
       ctx.textAlign = 'center';
       ctx.fillText(String(left), 0, 26);
       ctx.restore();
-      const chaserName = game.chaserIndex === 0 ? 'שחקן 1' : p2Name();
-      const runnerName = game.chaserIndex === 0 ? p2Name() : 'שחקן 1';
       ctx.save();
       ctx.translate(canvas.width / 2, canvas.height / 2 + 78);
       const breathe = 1 + 0.06 * Math.sin(game.time * 6);
@@ -377,29 +581,40 @@
       ctx.font = '24px "Helvetica Neue", Arial, sans-serif';
       ctx.textAlign = 'center';
       ctx.direction = 'rtl';
-      ctx.fillText(`${chaserName} רודף את ${runnerName}`, 0, 0);
+      ctx.fillText(countdownLabel(), 0, 0);
       ctx.restore();
-      game.players.forEach((p, i) => {
-        const isC = i === game.chaserIndex;
-        const bob = Math.sin(game.time * 5 + i) * 4;
-        ctx.save();
-        ctx.shadowColor = isC ? '#ff4444' : '#44ff88';
-        ctx.shadowBlur = 12;
-        ctx.fillStyle = isC ? '#ff8888' : '#88ffbb';
-        ctx.font = '15px "Helvetica Neue", Arial, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.direction = 'rtl';
-        ctx.fillText(isC ? 'רודף' : 'בורח', p.x, p.y - 18 + bob);
-        ctx.restore();
-      });
+      if (game.mode !== 'koth') {
+        game.players.forEach((p, i) => {
+          const infectionMode = game.mode === 'infection';
+          const marked = infectionMode ? game.infected[i] : i === game.chaserIndex;
+          const bob = Math.sin(game.time * 5 + i) * 4;
+          ctx.save();
+          ctx.shadowColor = marked ? '#ff4444' : '#44ff88';
+          ctx.shadowBlur = 12;
+          ctx.fillStyle = marked ? '#ff8888' : '#88ffbb';
+          ctx.font = '15px "Helvetica Neue", Arial, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.direction = 'rtl';
+          ctx.fillText(infectionMode ? (marked ? 'נגוע' : 'בריא') : (marked ? 'רודף' : 'בורח'),
+            p.x, p.y - 18 + bob);
+          ctx.restore();
+        });
+      }
     } else if (game.state === State.ROUND_OVER || game.state === State.MATCH_OVER) {
       buttons = [];
       const r = game.lastRoundResult;
-      const who = r.winnerIndex === 0 ? 'שחקן 1' : p2Name();
-      const why = r.reason === 'catch' ? 'תפיסה!' : 'הזמן נגמר';
-      const headline = game.state === State.MATCH_OVER
-        ? `${who} ניצח את המשחק!`
-        : `${who} לקח את הסיבוב — ${why}`;
+      const who = playerName(r.winnerIndex);
+      let headline;
+      if (game.state === State.MATCH_OVER) {
+        headline = `${who} ניצח את המשחק!`;
+      } else if (r.reason === 'survivor') {
+        headline = `${who} שרד אחרון!`;
+      } else {
+        const why = r.reason === 'catch' ? 'תפיסה!'
+          : r.reason === 'zone' ? 'שליטה בגבעה!'
+          : 'הזמן נגמר';
+        headline = `${who} לקח את הסיבוב — ${why}`;
+      }
       centerText(headline, canvas.height / 2 - 30, 26);
       if (game.state === State.MATCH_OVER) {
         drawButton('משחק חדש', canvas.width / 2 - 100, canvas.height / 2 + 14, 160, 40, true,
@@ -414,8 +629,52 @@
       }
       centerText('רווח להמשך · Esc למסך הבית', canvas.height / 2 + 84, 14, '#888888');
     }
+
+    drawEffects(dt);
   }
   window.__draw = draw; // verification/debug hook
+  window.__buttons = buttons; // refreshed below each frame
+
+  // ---------- AI drivers per mode ----------
+  /** Nearest player on the opposite infection side; null when none. */
+  function infectionTarget(i) {
+    const me = game.players[i];
+    const amInfected = game.infected[i];
+    let best = -1, bestD = Infinity;
+    for (let j = 0; j < game.players.length; j++) {
+      if (j === i || game.infected[j] === amInfected) continue;
+      const d = Math.hypot(game.players[j].x - me.x, game.players[j].y - me.y);
+      if (d < bestD) { bestD = d; best = j; }
+    }
+    if (best < 0) return null;
+    return { foeIndex: best, role: amInfected ? 'chase' : 'flee' };
+  }
+
+  function driveAI(dt) {
+    aiTimer -= dt;
+    if (aiTimer > 0) return;
+    const preset = PRESETS[settings.difficulty];
+    aiTimer = preset.interval;
+    if (game.mode === 'infection') {
+      // players 1..3 are AI: infected chase the nearest healthy player,
+      // healthy AIs flee the nearest infected one
+      for (let i = 1; i < game.players.length; i++) {
+        const t = infectionTarget(i);
+        if (!t) continue;
+        const [ax, ay] = computeAIDirection(game, i, preset.ai, null, t);
+        game.players[i].setDirection(ax, ay);
+      }
+    } else if (game.mode === 'koth') {
+      // simple seek toward the zone center, with slight jitter
+      if (!game.zone) return;
+      const p = game.players[1], z = game.zone;
+      p.setDirection(z.x - p.x + (Math.random() - 0.5) * 40,
+                     z.y - p.y + (Math.random() - 0.5) * 40);
+    } else {
+      const [ax, ay] = computeAIDirection(game, 1, preset.ai);
+      game.players[1].setDirection(ax, ay);
+    }
+  }
 
   // ---------- main loop ----------
   let last = performance.now();
@@ -432,26 +691,25 @@
         const [d1x, d1y] = dirFor(P1);
         game.players[0].setDirection(d1x, d1y);
       }
-      if (settings.aiMode) {
-        aiTimer -= dt;
-        if (aiTimer <= 0) { // reaction cadence per difficulty preset
-          const preset = PRESETS[settings.difficulty];
-          aiTimer = preset.interval;
-          const [ax, ay] = computeAIDirection(game, 1, preset.ai);
-          game.players[1].setDirection(ax, ay);
-        }
+      if (settings.aiMode || game.mode === 'infection') {
+        driveAI(dt);
       } else {
         const [d2x, d2y] = dirFor(P2);
         game.players[1].setDirection(d2x, d2y);
       }
     }
     game.step(dt);
+    if (game.lastEvent && game.lastEvent !== seenEvent) {
+      seenEvent = game.lastEvent;
+      spawnEffect(game.lastEvent);
+    }
     if ((game.state === State.ROUND_OVER || game.state === State.MATCH_OVER) && prevState === State.PLAYING) {
       audio.catchJingle();
     }
     prevState = game.state;
     audio.schedule();
-    draw();
+    draw(dt);
+    window.__buttons = buttons; // verification hook (current hit targets)
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);

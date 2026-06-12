@@ -4,6 +4,10 @@
  * with revised rules: trails are decorative only (players may cross any trail),
  * walls contain players without harm, and a round ends ONLY by
  * catch (chaser wins) or timeout (runner wins).
+ *
+ * Phase 2 additions: power-ups (dash / freeze / ghost), game modes
+ * ('classic' | 'koth' king-of-the-hill | 'infection' 4-player tag),
+ * and lastEvent reporting for renderer effects.
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
@@ -26,6 +30,20 @@
     noteIntervalNearMs: 70,
     pitchFarMult: 1.0,
     pitchNearMult: 1.6,
+    // power-ups
+    powerupIntervalS: 6,   // seconds between spawns (while playing)
+    powerupRadius: 10,
+    maxPowerups: 2,        // max simultaneously on the field
+    dashMult: 1.8,
+    dashSeconds: 2.0,
+    freezeMult: 0.35,
+    freezeSeconds: 1.6,
+    ghostSeconds: 2.0,
+    // modes
+    infectionPlayers: 4,
+    kothZoneRadius: 70,
+    kothMoveSeconds: 5,    // zone relocates this often
+    kothWinSeconds: 15,    // accumulated zone time to take the round
   };
 
   /** Game-speed presets (px/second), selectable on the start screen. */
@@ -66,6 +84,7 @@
       this.x = x; this.y = y;
       this.dirX = dirX; this.dirY = dirY;
       this.trail = [{ x, y, t: t || 0 }];
+      this.fx = { dash: 0, slow: 0, ghost: 0 }; // power-up effect timers (s)
     }
     /** Steer to a new direction (any direction allowed, incl. reversal). */
     setDirection(dx, dy) {
@@ -73,12 +92,19 @@
       const len = Math.sqrt(dx * dx + dy * dy);
       this.dirX = dx / len; this.dirY = dy / len;
     }
+    /** Current speed multiplier from active power-up effects. */
+    speedFactor(cfg) {
+      return (this.fx.dash > 0 ? cfg.dashMult : 1) * (this.fx.slow > 0 ? cfg.freezeMult : 1);
+    }
     /** Move; walls contain the player (slide/stop, never lethal).
      *  Trail points carry the game time `t` at which they were laid down,
-     *  so the renderer can keep each segment's color persistent. */
+     *  so the renderer can keep each segment's color persistent.
+     *  While ghosting, no trail is recorded (the player goes invisible). */
     advance(dt, cfg, now) {
-      this.x = clamp(this.x + this.dirX * cfg.speed * dt, cfg.playerRadius, cfg.width - cfg.playerRadius);
-      this.y = clamp(this.y + this.dirY * cfg.speed * dt, cfg.playerRadius, cfg.height - cfg.playerRadius);
+      const sp = cfg.speed * this.speedFactor(cfg);
+      this.x = clamp(this.x + this.dirX * sp * dt, cfg.playerRadius, cfg.width - cfg.playerRadius);
+      this.y = clamp(this.y + this.dirY * sp * dt, cfg.playerRadius, cfg.height - cfg.playerRadius);
+      if (this.fx.ghost > 0) return; // invisible: leave no trace
       const last = this.trail[this.trail.length - 1];
       if (dist(last.x, last.y, this.x, this.y) >= cfg.trailMinGap) {
         this.trail.push({ x: this.x, y: this.y, t: now || 0 });
@@ -92,46 +118,78 @@
     ROUND_OVER: 'round_over', MATCH_OVER: 'match_over',
   });
 
+  const POWERUP_TYPES = ['dash', 'freeze', 'ghost'];
+
   class Game {
     constructor(cfg) {
       this.cfg = Object.assign({}, CONFIG, cfg || {});
-      this.players = [
-        new Player(0, 0, 0, 1, 0),
-        new Player(1, 0, 0, -1, 0),
-      ];
-      this.scores = [0, 0];
+      this.mode = this.cfg.mode || 'classic'; // 'classic' | 'koth' | 'infection'
+      this.rand = this.cfg.rand || Math.random; // injectable for deterministic tests
+      const n = this.mode === 'infection' ? this.cfg.infectionPlayers : 2;
+      this.players = [];
+      for (let i = 0; i < n; i++) this.players.push(new Player(i, 0, 0, 1, 0));
+      this.scores = this.players.map(() => 0);
       this.round = 0;
-      this.chaserIndex = 0; // roles alternate every round
+      this.chaserIndex = 0; // roles rotate every round (initial infected in infection)
       this.state = State.READY;
       this.stateTime = 0;
       this.time = 0; // total elapsed game time (drives persistent trail colors)
       this.lastRoundResult = null;
+      this.lastEvent = null; // {type, x, y, time} — consumed by renderer effects
+      this.powerups = []; // {x, y, type}
+      this._powerupTimer = 0;
+      this.zone = null; // koth: {x, y}
+      this.zoneScore = this.players.map(() => 0); // koth: seconds spent in zone
+      this._zoneTimer = 0;
+      this.infected = this.players.map(() => false); // infection mode
       this._resetPositions();
     }
 
     get chaser() { return this.players[this.chaserIndex]; }
     get runner() { return this.players[1 - this.chaserIndex]; }
 
+    /** Spawn N players evenly spaced on an ellipse around the arena center,
+     *  facing inward. For N=2 this reproduces the classic 0.2w / 0.8w spots. */
     _resetPositions() {
-      const c = this.cfg;
-      this.players[0].reset(c.width * 0.2, c.height / 2, 1, 0, this.time);
-      this.players[1].reset(c.width * 0.8, c.height / 2, -1, 0, this.time);
+      const c = this.cfg, n = this.players.length;
+      const cx = c.width / 2, cy = c.height / 2;
+      const rx = c.width * 0.3, ry = c.height * 0.3;
+      for (let i = 0; i < n; i++) {
+        const a = Math.PI + (i / n) * Math.PI * 2; // player 0 on the left
+        const x = cx + Math.cos(a) * rx, y = cy + Math.sin(a) * ry;
+        const dx = cx - x, dy = cy - y;
+        const len = Math.hypot(dx, dy) || 1;
+        this.players[i].reset(x, y, dx / len, dy / len, this.time);
+      }
     }
 
     startRound() {
       this.round += 1;
-      this.chaserIndex = (this.round - 1) % 2;
+      this.chaserIndex = (this.round - 1) % this.players.length;
       this._resetPositions();
+      this.powerups = [];
+      this._powerupTimer = 0;
+      this.zoneScore = this.players.map(() => 0);
+      this._zoneTimer = 0;
+      if (this.mode === 'koth') this._placeZone();
+      this.infected = this.players.map((p, i) =>
+        this.mode === 'infection' && i === this.chaserIndex);
       this.state = State.COUNTDOWN;
       this.stateTime = 0;
     }
 
     /** Back to the menu after a match (keeps user settings intact). */
     resetMatch() {
-      this.scores = [0, 0];
+      this.scores = this.players.map(() => 0);
       this.round = 0;
       this.chaserIndex = 0;
       this.lastRoundResult = null;
+      this.lastEvent = null;
+      this.powerups = [];
+      this._powerupTimer = 0;
+      this.zone = null;
+      this.zoneScore = this.players.map(() => 0);
+      this.infected = this.players.map(() => false);
       this.state = State.READY;
       this.stateTime = 0;
       this._resetPositions();
@@ -146,10 +204,110 @@
       return audioFromDistance(this.distanceBetween(), this.cfg);
     }
 
-    /** Seconds left before the runner wins by timeout (0 when not playing). */
+    /** Seconds left before the round resolves by timeout (0 when not playing). */
     timeLeft() {
       if (this.state !== State.PLAYING) return 0;
       return Math.max(0, this.cfg.roundSeconds - this.stateTime);
+    }
+
+    _placeZone() {
+      const c = this.cfg, m = 100;
+      this.zone = {
+        x: m + this.rand() * (c.width - 2 * m),
+        y: m + this.rand() * (c.height - 2 * m),
+      };
+    }
+
+    _stepPowerups(dt) {
+      const c = this.cfg;
+      this._powerupTimer += dt;
+      if (this._powerupTimer >= c.powerupIntervalS && this.powerups.length < c.maxPowerups) {
+        this._powerupTimer = 0;
+        const m = 60; // keep clear of the walls
+        this.powerups.push({
+          x: m + this.rand() * (c.width - 2 * m),
+          y: m + this.rand() * (c.height - 2 * m),
+          type: POWERUP_TYPES[Math.min(POWERUP_TYPES.length - 1,
+            Math.floor(this.rand() * POWERUP_TYPES.length))],
+        });
+      }
+      for (let k = this.powerups.length - 1; k >= 0; k--) {
+        const pu = this.powerups[k];
+        const grab = this.players.find(p =>
+          dist(p.x, p.y, pu.x, pu.y) <= c.powerupRadius + c.playerRadius);
+        if (!grab) continue;
+        this.powerups.splice(k, 1);
+        if (pu.type === 'dash') grab.fx.dash = c.dashSeconds;
+        else if (pu.type === 'freeze') {
+          for (const q of this.players) if (q !== grab) q.fx.slow = c.freezeSeconds;
+        } else grab.fx.ghost = c.ghostSeconds;
+        this.lastEvent = { type: 'pickup', x: pu.x, y: pu.y, time: this.time };
+      }
+    }
+
+    _stepKoth(dt) {
+      const c = this.cfg;
+      this._zoneTimer += dt;
+      if (this._zoneTimer >= c.kothMoveSeconds) { this._zoneTimer = 0; this._placeZone(); }
+      for (let i = 0; i < this.players.length; i++) {
+        const p = this.players[i];
+        if (dist(p.x, p.y, this.zone.x, this.zone.y) <= c.kothZoneRadius) {
+          this.zoneScore[i] += dt;
+          if (this.zoneScore[i] >= c.kothWinSeconds) {
+            this.lastEvent = { type: 'zone', x: p.x, y: p.y, time: this.time };
+            return this._endRound(i, 'zone');
+          }
+        }
+      }
+      if (this.stateTime >= c.roundSeconds) {
+        let w = 0;
+        for (let i = 1; i < this.zoneScore.length; i++) {
+          if (this.zoneScore[i] > this.zoneScore[w]) w = i;
+        }
+        const p = this.players[w];
+        this.lastEvent = { type: 'timeout', x: p.x, y: p.y, time: this.time };
+        return this._endRound(w, 'timeout');
+      }
+    }
+
+    _stepInfection(dt) {
+      const c = this.cfg;
+      // spread: any infected player touching an uninfected one infects them
+      for (let i = 0; i < this.players.length; i++) {
+        if (!this.infected[i]) continue;
+        for (let j = 0; j < this.players.length; j++) {
+          if (this.infected[j]) continue;
+          const a = this.players[i], b = this.players[j];
+          if (dist(a.x, a.y, b.x, b.y) > c.catchRadius) continue;
+          this.infected[j] = true;
+          this.lastEvent = { type: 'infect', x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, time: this.time };
+          const healthy = [];
+          for (let k = 0; k < this.players.length; k++) if (!this.infected[k]) healthy.push(k);
+          if (healthy.length === 1) {
+            const p = this.players[healthy[0]];
+            this.lastEvent = { type: 'survivor', x: p.x, y: p.y, time: this.time };
+            return this._endRound(healthy[0], 'survivor');
+          }
+        }
+      }
+      if (this.stateTime >= c.roundSeconds) {
+        // among the uninfected, the one farthest from the nearest infected wins
+        let w = -1, bestD = -1;
+        for (let i = 0; i < this.players.length; i++) {
+          if (this.infected[i]) continue;
+          let near = Infinity;
+          for (let j = 0; j < this.players.length; j++) {
+            if (!this.infected[j]) continue;
+            near = Math.min(near,
+              dist(this.players[i].x, this.players[i].y, this.players[j].x, this.players[j].y));
+          }
+          if (near > bestD) { bestD = near; w = i; }
+        }
+        if (w < 0) w = this.chaserIndex; // degenerate: nobody healthy
+        const p = this.players[w];
+        this.lastEvent = { type: 'timeout', x: p.x, y: p.y, time: this.time };
+        return this._endRound(w, 'timeout');
+      }
     }
 
     /** Advance simulation by dt seconds. */
@@ -162,14 +320,27 @@
       }
       if (this.state !== State.PLAYING) return;
 
-      for (const p of this.players) p.advance(dt, this.cfg, this.time);
+      for (const p of this.players) {
+        p.fx.dash = Math.max(0, p.fx.dash - dt);
+        p.fx.slow = Math.max(0, p.fx.slow - dt);
+        p.fx.ghost = Math.max(0, p.fx.ghost - dt);
+        p.advance(dt, this.cfg, this.time);
+      }
 
-      // catch: chaser touches runner → chaser wins the round
+      this._stepPowerups(dt);
+
+      if (this.mode === 'koth') return this._stepKoth(dt);
+      if (this.mode === 'infection') return this._stepInfection(dt);
+
+      // classic — catch: chaser touches runner → chaser wins the round
       if (this.distanceBetween() <= this.cfg.catchRadius) {
+        const a = this.chaser, b = this.runner;
+        this.lastEvent = { type: 'catch', x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, time: this.time };
         return this._endRound(this.chaserIndex, 'catch');
       }
       // timeout: runner survived the full round → runner wins
       if (this.stateTime >= this.cfg.roundSeconds) {
+        this.lastEvent = { type: 'timeout', x: this.runner.x, y: this.runner.y, time: this.time };
         return this._endRound(1 - this.chaserIndex, 'timeout');
       }
     }

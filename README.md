@@ -1,4 +1,14 @@
-# Arcade Tag — Phase 1 MVP (תופסת ארקייד)
+# Arcade Tag (תופסת ארקייד)
+
+**Play it live: https://tsemachh.github.io/arcade-tag/**
+
+Phase 2 features: three game modes — Classic (קלאסי), King of the Hill
+(מלך הגבעה: hold the moving zone 15s), and Infection (הדבקה: 4 players,
+one starts infected, last healthy player wins); power-ups (⚡ dash,
+❄ freeze opponents, 👻 ghost — invisible, trail stops); and catch-moment
+effects (flash, expanding rings, particle burst).
+
+## Phase 1 MVP
 
 Phase 1 MVP per the spec ("Start small"): local 2-player tag on one keyboard,
 solid trails as lethal obstacles, and POKEY-style adaptive audio — a square-wave

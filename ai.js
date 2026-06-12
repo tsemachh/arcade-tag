@@ -28,18 +28,28 @@
   /**
    * Compute the AI's steering direction for the player at `aiIndex`.
    * Pure function of game state; `rand` is injectable for deterministic tests.
-   * Returns a normalized [dx, dy].
+   * `target` ({foeIndex, role: 'chase'|'flee'}) is optional — when omitted,
+   * the classic 2-player roles apply (foe = the other player, role from
+   * game.chaserIndex). Returns a normalized [dx, dy].
    */
-  function computeAIDirection(game, aiIndex, opts, rand) {
+  function computeAIDirection(game, aiIndex, opts, rand, target) {
     const o = Object.assign({}, DEFAULTS, opts || {});
     const me = game.players[aiIndex];
-    const foe = game.players[1 - aiIndex];
+    const tgt = target || {
+      foeIndex: 1 - aiIndex,
+      role: game.chaserIndex === aiIndex ? 'chase' : 'flee',
+    };
+    const foe = game.players[tgt.foeIndex];
     const c = game.cfg;
     const d = Math.hypot(foe.x - me.x, foe.y - me.y);
-    const isChaser = game.chaserIndex === aiIndex;
+    const isChaser = tgt.role === 'chase';
+
+    // ghosting foe: the AI half-loses the target — no prediction, 4× jitter
+    const ghosted = !!(foe.fx && foe.fx.ghost > 0);
+    const jitter = ghosted ? o.jitter * 4 : o.jitter;
 
     // predicted foe position (pursuit/evasion): lead grows with distance
-    const lead = Math.min(o.leadTimeMax, (d / c.speed) * 0.5);
+    const lead = ghosted ? 0 : Math.min(o.leadTimeMax, (d / c.speed) * 0.5);
     const fx = foe.x + foe.dirX * c.speed * lead;
     const fy = foe.y + foe.dirY * c.speed * lead;
 
@@ -47,6 +57,13 @@
     if (isChaser) {
       // pursuit: seek the predicted interception point
       vx = fx - me.x; vy = fy - me.y;
+      if (ghosted) {
+        const m = Math.hypot(vx, vy) || 1;
+        vx /= m; vy /= m;
+        const r = rand || Math.random;
+        vx += (r() - 0.5) * jitter;
+        vy += (r() - 0.5) * jitter;
+      }
     } else {
       // evasion: flee the predicted chaser position…
       vx = me.x - fx; vy = me.y - fy;
@@ -77,10 +94,10 @@
         vx += tx * o.wallWeight * 0.9;
         vy += ty * o.wallWeight * 0.9;
       }
-      // light jitter for less predictable escape lines
+      // light jitter for less predictable escape lines (4× when ghosted)
       const r = rand || Math.random;
-      vx += (r() - 0.5) * o.jitter;
-      vy += (r() - 0.5) * o.jitter;
+      vx += (r() - 0.5) * jitter;
+      vy += (r() - 0.5) * jitter;
     }
 
     const len = Math.hypot(vx, vy);
