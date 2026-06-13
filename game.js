@@ -24,6 +24,164 @@
   const settings = { opponent: 'cpu', difficulty: 'medium', speed: 'normal', gameMode: 'classic' };
   window.__settings = settings; // verification hook
 
+  // ---------- i18n ----------
+  const STR = {
+    he: {
+      title: 'תופסת ארקייד',
+      rules1: 'הרודף (טבעת לבנה) מנסה לתפוס את הבורח לפני שנגמר הזמן.',
+      rules2: 'תפיסה = נקודה לרודף · נגמר הזמן = נקודה לבורח · ראשון ל־3 מנצח.',
+      rules3: 'השובלים צבעוניים בלבד — מותר לחצות אותם. הסאונד מאיץ כשהמרחק מתקצר!',
+      rowGameType: 'סוג משחק',
+      modeClassic: 'קלאסי',
+      modeKoth: 'מלך הגבעה',
+      modeInfection: 'הדבקה',
+      rowOpponent: 'מצב משחק',
+      oppCpu: 'נגד המחשב',
+      oppLocal: 'שני שחקנים',
+      oppOnline: 'אונליין',
+      rowDifficulty: 'רמת קושי',
+      diffEasy: 'קל',
+      diffMedium: 'בינוני',
+      diffHard: 'קשה',
+      rowSpeed: 'מהירות',
+      speedSlow: 'איטי',
+      speedNormal: 'רגיל',
+      speedFast: 'מהיר',
+      startGame: 'התחל משחק',
+      powerups: 'בונוסים: ⚡ האצה · ❄ הקפאת יריב · 👻 היעלמות',
+      hintOnline: 'אונליין — שלטו ב־W,A,S,D או מגע · המארח לוחץ רווח להתחלה · M להשתקה',
+      hintAI: 'שחקן 1 — W,A,S,D או מגע · רווח להתחלה · M להשתקה',
+      hintLocal: 'שחקן 1 — W,A,S,D · שחקן 2 — חצים · רווח להתחלה · M להשתקה',
+      onlineUnavailableBrowser: 'אונליין אינו זמין בדפדפן זה',
+      hostConnectedStart: 'שחקן 2 מחובר ✓ — לחצו "התחל משחק"',
+      guestConnectedWaiting: 'מחובר ✓ — ממתין למארח',
+      playFriend: 'שחקו מול חבר דרך האינטרנט',
+      btnHost: 'אירוח',
+      btnJoin: 'הצטרפות',
+      btnDisconnect: 'התנתק',
+      btnCancel: 'ביטול',
+      btnNewMatch: 'משחק חדש',
+      btnHome: 'מסך הבית',
+      btnNextRound: 'לסיבוב הבא',
+      continueEsc: 'רווח להמשך · Esc למסך הבית',
+      waitingHost: 'ממתין למארח',
+      kothGo: 'שלטו באזור!',
+      computer: 'המחשב',
+      player1: 'שחקן 1',
+      player2: 'שחקן 2',
+      cpuN: (n) => `מחשב ${n}`,
+      roleInfected: 'נגוע',
+      roleHealthy: 'בריא',
+      roleChaser: 'רודף',
+      roleRunner: 'בורח',
+      healthy: (n) => `בריאים: ${n}`,
+      netHosting: 'יוצר חדר…',
+      netWaiting: 'ממתין לשחקן 2…',
+      netConnecting: 'מתחבר…',
+      netConnected: 'מחובר ✓',
+      netClosed: 'החיבור נותק',
+      errPrefix: (e) => `שגיאה: ${e}`,
+      errFailed: 'נכשל',
+      onlineUnavailable: 'אונליין לא זמין',
+      roomCode: (c) => `קוד החדר: ${c}`,
+      roomCodeStatus: (c, s) => `קוד החדר: ${c} · ${s}`,
+      promptCode: 'הזן קוד חדר (5 תווים):',
+      connectFirst: 'התחברו תחילה (אירוח או הצטרפות)',
+      connectedRoom: (c) => `מחוברים לחדר ${c}`,
+      waitHostStart: 'ממתין שהמארח יתחיל את המשחק',
+      moveControls: 'שלטו בעזרת W,A,S,D או מגע',
+      chasesRunner: (chaser, runner) => `${chaser} רודף את ${runner}`,
+      startsInfected: (name) => `${name} מתחיל נגוע — ברחו!`,
+      wonMatch: (who) => `${who} ניצח את המשחק!`,
+      survivedLast: (who) => `${who} שרד אחרון!`,
+      reasonCatch: 'תפיסה!',
+      reasonZone: 'שליטה בגבעה!',
+      reasonTimeout: 'הזמן נגמר',
+      tookRound: (who, why) => `${who} לקח את הסיבוב — ${why}`,
+    },
+    en: {
+      title: 'Arcade Tag',
+      rules1: 'The chaser (white ring) tries to catch the runner before time runs out.',
+      rules2: 'Catch = chaser point · Timeout = runner point · First to 3 wins.',
+      rules3: 'Trails are decorative — you may cross them. The sound speeds up as you close in!',
+      rowGameType: 'Game type',
+      modeClassic: 'Classic',
+      modeKoth: 'King of the Hill',
+      modeInfection: 'Infection',
+      rowOpponent: 'Opponent',
+      oppCpu: 'vs Computer',
+      oppLocal: '2 Players',
+      oppOnline: 'Online',
+      rowDifficulty: 'Difficulty',
+      diffEasy: 'Easy',
+      diffMedium: 'Medium',
+      diffHard: 'Hard',
+      rowSpeed: 'Speed',
+      speedSlow: 'Slow',
+      speedNormal: 'Normal',
+      speedFast: 'Fast',
+      startGame: 'Start game',
+      powerups: 'Power-ups: ⚡ dash · ❄ freeze · 👻 ghost',
+      hintOnline: 'Online — move with W,A,S,D or touch · host presses Space to start · M to mute',
+      hintAI: 'Player 1 — W,A,S,D or touch · Space to start · M to mute',
+      hintLocal: 'Player 1 — W,A,S,D · Player 2 — arrows · Space to start · M to mute',
+      onlineUnavailableBrowser: 'Online is unavailable in this browser',
+      hostConnectedStart: 'Player 2 connected ✓ — press "Start game"',
+      guestConnectedWaiting: 'Connected ✓ — waiting for host',
+      playFriend: 'Play a friend over the internet',
+      btnHost: 'Host',
+      btnJoin: 'Join',
+      btnDisconnect: 'Disconnect',
+      btnCancel: 'Cancel',
+      btnNewMatch: 'New match',
+      btnHome: 'Home',
+      btnNextRound: 'Next round',
+      continueEsc: 'Space to continue · Esc for home',
+      waitingHost: 'Waiting for host',
+      kothGo: 'Control the zone!',
+      computer: 'Computer',
+      player1: 'Player 1',
+      player2: 'Player 2',
+      cpuN: (n) => `CPU ${n}`,
+      roleInfected: 'Infected',
+      roleHealthy: 'Healthy',
+      roleChaser: 'Chaser',
+      roleRunner: 'Runner',
+      healthy: (n) => `Healthy: ${n}`,
+      netHosting: 'Creating room…',
+      netWaiting: 'Waiting for player 2…',
+      netConnecting: 'Connecting…',
+      netConnected: 'Connected ✓',
+      netClosed: 'Disconnected',
+      errPrefix: (e) => `Error: ${e}`,
+      errFailed: 'failed',
+      onlineUnavailable: 'Online unavailable',
+      roomCode: (c) => `Room code: ${c}`,
+      roomCodeStatus: (c, s) => `Room code: ${c} · ${s}`,
+      promptCode: 'Enter room code (5 chars):',
+      connectFirst: 'Connect first (Host or Join)',
+      connectedRoom: (c) => `Connected to room ${c}`,
+      waitHostStart: 'Waiting for the host to start',
+      moveControls: 'Move with W,A,S,D or touch',
+      chasesRunner: (chaser, runner) => `${chaser} chases ${runner}`,
+      startsInfected: (name) => `${name} starts infected — run!`,
+      wonMatch: (who) => `${who} won the match!`,
+      survivedLast: (who) => `${who} survived last!`,
+      reasonCatch: 'Caught!',
+      reasonZone: 'Held the hill!',
+      reasonTimeout: 'Time up',
+      tookRound: (who, why) => `${who} took the round — ${why}`,
+    },
+  };
+  let lang = localStorage.getItem('arcadeTagLang');
+  if (lang !== 'he' && lang !== 'en') lang = (navigator.language || '').toLowerCase().startsWith('he') ? 'he' : 'en';
+  function t(key, ...args) { const v = (STR[lang] && STR[lang][key]) ?? (STR.en[key]); return typeof v === 'function' ? v(...args) : v; }
+  function dir() { return lang === 'he' ? 'rtl' : 'ltr'; }
+  function setLang(l) { lang = l; try { localStorage.setItem('arcadeTagLang', l); } catch (e) {} }
+  window.__t = t;
+  window.__setLang = setLang;
+  window.__lang = () => lang;
+
   // Infection is a 4-player vs-computer mode; otherwise the opponent setting rules.
   function isAI() { return settings.gameMode === 'infection' || settings.opponent === 'cpu'; }
   function isOnline() { return settings.gameMode !== 'infection' && settings.opponent === 'online'; }
@@ -62,33 +220,33 @@
     syncMode();
   };
 
-  function p2Name() { return isAI() ? 'המחשב' : 'שחקן 2'; }
+  function p2Name() { return isAI() ? t('computer') : t('player2'); }
   function playerName(i) {
-    if (game.players.length > 2) return i === 0 ? 'שחקן 1' : `מחשב ${i + 1}`;
-    return i === 0 ? 'שחקן 1' : p2Name();
+    if (game.players.length > 2) return i === 0 ? t('player1') : t('cpuN', i + 1);
+    return i === 0 ? t('player1') : p2Name();
   }
   function applySpeed() { game.cfg.speed = SPEEDS[settings.speed]; }
 
   let aiTimer = 0;
 
   // ---------- networking wiring (Phase 3) ----------
-  const NET_STATUS_TEXT = {
-    idle: '', hosting: 'יוצר חדר…', waiting: 'ממתין לשחקן 2…',
-    connecting: 'מתחבר…', connected: 'מחובר ✓', closed: 'החיבור נותק',
+  const NET_STATUS_KEYS = {
+    idle: '', hosting: 'netHosting', waiting: 'netWaiting',
+    connecting: 'netConnecting', connected: 'netConnected', closed: 'netClosed',
   };
 
   function onNetStatus(s, err) {
-    netMsg = s === 'error' ? `שגיאה: ${err || 'נכשל'}` : (NET_STATUS_TEXT[s] || '');
+    netMsg = s === 'error' ? t('errPrefix', err || t('errFailed')) : (NET_STATUS_KEYS[s] ? t(NET_STATUS_KEYS[s]) : '');
   }
 
   function onNetConnected() {
-    netMsg = NET_STATUS_TEXT.connected;
+    netMsg = t('netConnected');
     // Guest mirrors the host's mode/state via snapshots; start from a clean game.
     if (NET.role === 'guest') { effects = []; seenEvent = null; seenEventKey = null; }
   }
 
   function onNetClosed() {
-    netMsg = NET_STATUS_TEXT.closed;
+    netMsg = t('netClosed');
     guestInput = [0, 0];
     // If a networked match was in progress, fall back to the menu.
     if (game.state !== State.READY) { game.resetMatch(); }
@@ -119,13 +277,13 @@
   }
 
   function hostGame() {
-    if (!NET) { netMsg = 'אונליין לא זמין'; return; }
+    if (!NET) { netMsg = t('onlineUnavailable'); return; }
     const code = NET.host();
-    netMsg = code ? `קוד החדר: ${code}` : netMsg;
+    netMsg = code ? t('roomCode', code) : netMsg;
   }
   function joinGame() {
-    if (!NET) { netMsg = 'אונליין לא זמין'; return; }
-    const code = window.prompt('הזן קוד חדר (5 תווים):', '');
+    if (!NET) { netMsg = t('onlineUnavailable'); return; }
+    const code = window.prompt(t('promptCode'), '');
     if (code) NET.join(code);
   }
   function leaveOnline() { if (NET) NET.close(); netMsg = ''; }
@@ -148,7 +306,7 @@
     audio.ensureStarted();
     if (amGuest()) return; // online: the host drives round flow
     if (isOnline() && !NET.isConnected()) { // need a partner before starting
-      netMsg = 'התחברו תחילה (אירוח או הצטרפות)';
+      netMsg = t('connectFirst');
       return;
     }
     if (game.state === State.READY) syncMode();
@@ -444,7 +602,7 @@
     ctx.fillStyle = color || '#ffffff';
     ctx.font = `${size}px "Helvetica Neue", Arial, sans-serif`;
     ctx.textAlign = 'center';
-    ctx.direction = 'rtl';
+    ctx.direction = dir();
     ctx.fillText(text, canvas.width / 2, y);
   }
 
@@ -473,7 +631,7 @@
     ctx.font = '15px "Helvetica Neue", Arial, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.direction = 'rtl';
+    ctx.direction = dir();
     ctx.fillText(label, cx, y + h / 2 + 1);
     ctx.restore();
     buttons.push({ x, y, w, h, fn });
@@ -493,18 +651,21 @@
 
   function drawMenu() {
     buttons = [];
+    // language toggle button — top-left corner (cx=46 means x=14..78)
+    drawButton(lang === 'he' ? 'English' : 'עברית', 46, 12, 64, 24, false,
+      () => setLang(lang === 'he' ? 'en' : 'he'));
     ctx.save();
     ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 18;
-    centerText('תופסת ארקייד', 70, 38);
+    centerText(t('title'), 70, 38);
     ctx.restore();
-    centerText('הרודף (טבעת לבנה) מנסה לתפוס את הבורח לפני שנגמר הזמן.', 106, 15);
-    centerText('תפיסה = נקודה לרודף · נגמר הזמן = נקודה לבורח · ראשון ל־3 מנצח.', 128, 15);
-    centerText('השובלים צבעוניים בלבד — מותר לחצות אותם. הסאונד מאיץ כשהמרחק מתקצר!', 150, 15);
+    centerText(t('rules1'), 106, 15);
+    centerText(t('rules2'), 128, 15);
+    centerText(t('rules3'), 150, 15);
 
-    drawChoiceRow('סוג משחק', [
-      { key: 'classic', label: 'קלאסי' },
-      { key: 'koth', label: 'מלך הגבעה' },
-      { key: 'infection', label: 'הדבקה' },
+    drawChoiceRow(t('rowGameType'), [
+      { key: 'classic', label: t('modeClassic') },
+      { key: 'koth', label: t('modeKoth') },
+      { key: 'infection', label: t('modeInfection') },
     ], settings.gameMode, 188, (k) => {
       settings.gameMode = k;
       if (k === 'infection' && settings.opponent !== 'local') {
@@ -515,10 +676,10 @@
     }, 104);
 
     if (settings.gameMode !== 'infection') {
-      drawChoiceRow('מצב משחק', [
-        { key: 'cpu', label: 'נגד המחשב' },
-        { key: 'local', label: 'שני שחקנים' },
-        { key: 'online', label: 'אונליין' },
+      drawChoiceRow(t('rowOpponent'), [
+        { key: 'cpu', label: t('oppCpu') },
+        { key: 'local', label: t('oppLocal') },
+        { key: 'online', label: t('oppOnline') },
       ], settings.opponent, 240, (k) => {
         if (k !== 'online' && isOnline()) leaveOnline();
         settings.opponent = k;
@@ -526,34 +687,34 @@
     }
 
     if (isAI()) {
-      drawChoiceRow('רמת קושי', [
-        { key: 'easy', label: 'קל' },
-        { key: 'medium', label: 'בינוני' },
-        { key: 'hard', label: 'קשה' },
+      drawChoiceRow(t('rowDifficulty'), [
+        { key: 'easy', label: t('diffEasy') },
+        { key: 'medium', label: t('diffMedium') },
+        { key: 'hard', label: t('diffHard') },
       ], settings.difficulty, 292, (k) => { settings.difficulty = k; });
     } else if (isOnline()) {
       drawOnlinePanel(292);
     }
 
-    drawChoiceRow('מהירות', [
-      { key: 'slow', label: 'איטי' },
-      { key: 'normal', label: 'רגיל' },
-      { key: 'fast', label: 'מהיר' },
+    drawChoiceRow(t('rowSpeed'), [
+      { key: 'slow', label: t('speedSlow') },
+      { key: 'normal', label: t('speedNormal') },
+      { key: 'fast', label: t('speedFast') },
     ], settings.speed, 344, (k) => { settings.speed = k; });
 
     // start button
     ctx.save();
     ctx.shadowColor = colorAt(game.time);
     ctx.shadowBlur = 16;
-    drawButton('התחל משחק', canvas.width / 2, 398, 180, 44, true, advanceState);
+    drawButton(t('startGame'), canvas.width / 2, 398, 180, 44, true, advanceState);
     ctx.restore();
 
-    centerText('בונוסים: ⚡ האצה · ❄ הקפאת יריב · 👻 היעלמות', 470, 14, '#aaaaaa');
+    centerText(t('powerups'), 470, 14, '#aaaaaa');
     centerText(isOnline()
-      ? 'אונליין — שלטו ב־W,A,S,D או מגע · המארח לוחץ רווח להתחלה · M להשתקה'
+      ? t('hintOnline')
       : isAI()
-        ? 'שחקן 1 — W,A,S,D או מגע · רווח להתחלה · M להשתקה'
-        : 'שחקן 1 — W,A,S,D · שחקן 2 — חצים · רווח להתחלה · M להשתקה',
+        ? t('hintAI')
+        : t('hintLocal'),
       494, 13, '#888888');
   }
 
@@ -562,36 +723,39 @@
     const st = NET ? NET.status : 'idle';
     const connected = NET && NET.isConnected();
     let line;
-    if (!NET) line = 'אונליין אינו זמין בדפדפן זה';
-    else if (connected) line = NET.role === 'host' ? 'שחקן 2 מחובר ✓ — לחצו "התחל משחק"' : 'מחובר ✓ — ממתין למארח';
-    else if ((st === 'hosting' || st === 'waiting') && NET.code) line = `קוד החדר: ${NET.code} · ${NET_STATUS_TEXT[st]}`;
-    else line = netMsg || 'שחקו מול חבר דרך האינטרנט';
+    if (!NET) line = t('onlineUnavailableBrowser');
+    else if (connected) line = NET.role === 'host' ? t('hostConnectedStart') : t('guestConnectedWaiting');
+    else if ((st === 'hosting' || st === 'waiting') && NET.code) line = t('roomCodeStatus', NET.code, t(NET_STATUS_KEYS[st]));
+    else line = netMsg || t('playFriend');
     centerText(line, y - 6, 14, connected ? '#88ffbb' : (st === 'error' ? '#ff8888' : '#aaaaaa'));
     if (!NET) return;
     if (connected) {
-      drawButton('התנתק', canvas.width / 2, y + 6, 130, 30, false, leaveOnline);
+      drawButton(t('btnDisconnect'), canvas.width / 2, y + 6, 130, 30, false, leaveOnline);
     } else if (st === 'hosting' || st === 'waiting' || st === 'connecting') {
-      drawButton('ביטול', canvas.width / 2, y + 6, 130, 30, false, leaveOnline);
+      drawButton(t('btnCancel'), canvas.width / 2, y + 6, 130, 30, false, leaveOnline);
     } else {
       const w = 120, h = 30, gap = 12, total = 2 * w + gap;
       let cx = canvas.width / 2 + total / 2 - w / 2; // rightmost first (RTL)
-      drawButton('אירוח', cx, y + 6, w, h, true, hostGame); cx -= w + gap;
-      drawButton('הצטרפות', cx, y + 6, w, h, false, joinGame);
+      drawButton(t('btnHost'), cx, y + 6, w, h, true, hostGame); cx -= w + gap;
+      drawButton(t('btnJoin'), cx, y + 6, w, h, false, joinGame);
     }
   }
 
   /** Guest's pre-game screen while the host is still in the menu. */
   function drawGuestWaiting() {
     buttons = [];
+    // language toggle button — top-left corner
+    drawButton(lang === 'he' ? 'English' : 'עברית', 46, 12, 64, 24, false,
+      () => setLang(lang === 'he' ? 'en' : 'he'));
     ctx.save();
     ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 18;
-    centerText('תופסת ארקייד', 150, 38);
+    centerText(t('title'), 150, 38);
     ctx.restore();
-    centerText('מחוברים לחדר ' + (NET && NET.code ? NET.code : ''), 220, 18, '#88ffbb');
+    centerText(t('connectedRoom', NET && NET.code ? NET.code : ''), 220, 18, '#88ffbb');
     const dots = '.'.repeat(1 + (Math.floor(game.time * 2) % 3));
-    centerText('ממתין שהמארח יתחיל את המשחק' + dots, 260, 18);
-    centerText('שלטו בעזרת W,A,S,D או מגע', 300, 14, '#888888');
-    drawButton('התנתק', canvas.width / 2, 340, 130, 32, false, leaveOnline);
+    centerText(t('waitHostStart') + dots, 260, 18);
+    centerText(t('moveControls'), 300, 14, '#888888');
+    drawButton(t('btnDisconnect'), canvas.width / 2, 340, 130, 32, false, leaveOnline);
   }
 
   function drawJoystick() {
@@ -629,8 +793,8 @@
       const healthy = game.infected.filter(v => !v).length;
       ctx.save();
       ctx.textAlign = 'right';
-      ctx.direction = 'rtl';
-      ctx.fillText(`בריאים: ${healthy}`, canvas.width - 14, 24);
+      ctx.direction = dir();
+      ctx.fillText(t('healthy', healthy), canvas.width - 14, 24);
       ctx.restore();
     } else {
       ctx.textAlign = 'left';
@@ -641,11 +805,11 @@
   }
 
   function countdownLabel() {
-    if (game.mode === 'koth') return 'שלטו באזור!';
-    if (game.mode === 'infection') return `${playerName(game.chaserIndex)} מתחיל נגוע — ברחו!`;
+    if (game.mode === 'koth') return t('kothGo');
+    if (game.mode === 'infection') return t('startsInfected', playerName(game.chaserIndex));
     const chaserName = playerName(game.chaserIndex);
     const runnerName = playerName(1 - game.chaserIndex);
-    return `${chaserName} רודף את ${runnerName}`;
+    return t('chasesRunner', chaserName, runnerName);
   }
 
   function draw(frameDt) {
@@ -709,7 +873,7 @@
       ctx.fillStyle = '#ffffff';
       ctx.font = '24px "Helvetica Neue", Arial, sans-serif';
       ctx.textAlign = 'center';
-      ctx.direction = 'rtl';
+      ctx.direction = dir();
       ctx.fillText(countdownLabel(), 0, 0);
       ctx.restore();
       if (game.mode !== 'koth') {
@@ -723,8 +887,8 @@
           ctx.fillStyle = marked ? '#ff8888' : '#88ffbb';
           ctx.font = '15px "Helvetica Neue", Arial, sans-serif';
           ctx.textAlign = 'center';
-          ctx.direction = 'rtl';
-          ctx.fillText(infectionMode ? (marked ? 'נגוע' : 'בריא') : (marked ? 'רודף' : 'בורח'),
+          ctx.direction = dir();
+          ctx.fillText(infectionMode ? (marked ? t('roleInfected') : t('roleHealthy')) : (marked ? t('roleChaser') : t('roleRunner')),
             p.x, p.y - 18 + bob);
           ctx.restore();
         });
@@ -735,32 +899,32 @@
       const who = playerName(r.winnerIndex);
       let headline;
       if (game.state === State.MATCH_OVER) {
-        headline = `${who} ניצח את המשחק!`;
+        headline = t('wonMatch', who);
       } else if (r.reason === 'survivor') {
-        headline = `${who} שרד אחרון!`;
+        headline = t('survivedLast', who);
       } else {
-        const why = r.reason === 'catch' ? 'תפיסה!'
-          : r.reason === 'zone' ? 'שליטה בגבעה!'
-          : 'הזמן נגמר';
-        headline = `${who} לקח את הסיבוב — ${why}`;
+        const why = r.reason === 'catch' ? t('reasonCatch')
+          : r.reason === 'zone' ? t('reasonZone')
+          : t('reasonTimeout');
+        headline = t('tookRound', who, why);
       }
       centerText(headline, canvas.height / 2 - 30, 26);
       if (amGuest()) {
         // online guest: the host controls round flow
         const dots = '.'.repeat(1 + (Math.floor(game.time * 2) % 3));
-        centerText('ממתין למארח' + dots, canvas.height / 2 + 40, 16, '#aaaaaa');
+        centerText(t('waitingHost') + dots, canvas.height / 2 + 40, 16, '#aaaaaa');
       } else if (game.state === State.MATCH_OVER) {
-        drawButton('משחק חדש', canvas.width / 2 - 100, canvas.height / 2 + 14, 160, 40, true,
+        drawButton(t('btnNewMatch'), canvas.width / 2 - 100, canvas.height / 2 + 14, 160, 40, true,
           () => { applySpeed(); game.resetMatch(); game.startRound(); });
-        drawButton('מסך הבית', canvas.width / 2 + 100, canvas.height / 2 + 14, 160, 40, false,
+        drawButton(t('btnHome'), canvas.width / 2 + 100, canvas.height / 2 + 14, 160, 40, false,
           () => game.resetMatch());
-        centerText('רווח להמשך · Esc למסך הבית', canvas.height / 2 + 84, 14, '#888888');
+        centerText(t('continueEsc'), canvas.height / 2 + 84, 14, '#888888');
       } else {
-        drawButton('לסיבוב הבא', canvas.width / 2 - 100, canvas.height / 2 + 14, 160, 40, true,
+        drawButton(t('btnNextRound'), canvas.width / 2 - 100, canvas.height / 2 + 14, 160, 40, true,
           () => { applySpeed(); game.startRound(); });
-        drawButton('מסך הבית', canvas.width / 2 + 100, canvas.height / 2 + 14, 160, 40, false,
+        drawButton(t('btnHome'), canvas.width / 2 + 100, canvas.height / 2 + 14, 160, 40, false,
           () => game.resetMatch());
-        centerText('רווח להמשך · Esc למסך הבית', canvas.height / 2 + 84, 14, '#888888');
+        centerText(t('continueEsc'), canvas.height / 2 + 84, 14, '#888888');
       }
     }
 
