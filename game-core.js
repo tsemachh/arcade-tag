@@ -19,12 +19,17 @@
     width: 800,
     height: 520,
     playerRadius: 5,
-    trailWidth: 3,
+    trailWidth: 6,         // bolder "spaghetti" lines (Phase 4 feel pass)
     catchRadius: 14,
     speed: 150,            // px / second
     trailMinGap: 3,        // min px between recorded trail points
     roundSeconds: 30,      // runner survives this long → runner wins
     winsToTakeMatch: 3,    // best of five
+    // decoy "spaghetti" laid on the field at round start (camouflage for radar)
+    decoyLines: 6,
+    decoyStep: 14,         // px between decoy points
+    decoyMin: 26,          // min / max points per decoy line
+    decoyMax: 60,
     // audio mapping (consumed by browser layer, tested here)
     noteIntervalFarMs: 300,
     noteIntervalNearMs: 70,
@@ -102,8 +107,16 @@
      *  While ghosting, no trail is recorded (the player goes invisible). */
     advance(dt, cfg, now) {
       const sp = cfg.speed * this.speedFactor(cfg);
-      this.x = clamp(this.x + this.dirX * sp * dt, cfg.playerRadius, cfg.width - cfg.playerRadius);
-      this.y = clamp(this.y + this.dirY * sp * dt, cfg.playerRadius, cfg.height - cfg.playerRadius);
+      const lo = cfg.playerRadius, hiX = cfg.width - cfg.playerRadius, hiY = cfg.height - cfg.playerRadius;
+      let nx = this.x + this.dirX * sp * dt;
+      let ny = this.y + this.dirY * sp * dt;
+      // Walls bounce (reflect heading) instead of pinning — the actor never
+      // stops, so the game is always in motion.
+      if (nx < lo) { nx = lo; this.dirX = Math.abs(this.dirX); }
+      else if (nx > hiX) { nx = hiX; this.dirX = -Math.abs(this.dirX); }
+      if (ny < lo) { ny = lo; this.dirY = Math.abs(this.dirY); }
+      else if (ny > hiY) { ny = hiY; this.dirY = -Math.abs(this.dirY); }
+      this.x = nx; this.y = ny;
       if (this.fx.ghost > 0) return; // invisible: leave no trace
       const last = this.trail[this.trail.length - 1];
       if (dist(last.x, last.y, this.x, this.y) >= cfg.trailMinGap) {
@@ -161,6 +174,31 @@
         const len = Math.hypot(dx, dy) || 1;
         this.players[i].reset(x, y, dx / len, dy / len, this.time);
       }
+      this.decoys = this._makeDecoys();
+    }
+
+    /** Random-walk "spaghetti" lines laid on the field at round start. They
+     *  are purely decorative camouflage (the renderer shows them in radar mode
+     *  so a real trail is hard to pick out). Uses this.rand for determinism. */
+    _makeDecoys() {
+      const c = this.cfg, lines = [];
+      const lo = c.playerRadius, hiX = c.width - c.playerRadius, hiY = c.height - c.playerRadius;
+      const n = c.decoyLines || 0;
+      for (let i = 0; i < n; i++) {
+        let x = lo + this.rand() * (hiX - lo);
+        let y = lo + this.rand() * (hiY - lo);
+        let a = this.rand() * Math.PI * 2;
+        const steps = (c.decoyMin || 26) + Math.floor(this.rand() * ((c.decoyMax || 60) - (c.decoyMin || 26)));
+        const pts = [{ x, y }];
+        for (let s = 0; s < steps; s++) {
+          a += (this.rand() - 0.5) * 0.9; // gentle wander
+          x = clamp(x + Math.cos(a) * (c.decoyStep || 14), lo, hiX);
+          y = clamp(y + Math.sin(a) * (c.decoyStep || 14), lo, hiY);
+          pts.push({ x, y });
+        }
+        lines.push({ pts, hue: this.rand() * 360 });
+      }
+      return lines;
     }
 
     startRound() {

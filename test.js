@@ -69,16 +69,21 @@ console.log('timeout: runner surviving the round wins');
   assert(g.lastRoundResult.winnerIndex === 1, 'runner (P2) wins round 1 timeout');
 }
 
-console.log('walls contain players (never lethal)');
+console.log('walls bounce players (never lethal, always moving)');
 {
   const g = playingGame({ roundSeconds: 9999 });
-  const p2 = g.players[1]; // heading (-1,0) toward left wall
-  g.players[0].setDirection(0, -1); // send P1 to the top edge, out of catch range
-  for (let i = 0; i < 600; i++) g.step(1 / 60); // ~10s, way past wall contact
+  const p = g.players[1];
+  // Put the players in different rows so a bounce can't cause a catch, and aim
+  // p at the left wall from a spot close enough to bounce within the window.
+  p.x = 200; p.y = 60; p.setDirection(-1, 0);
+  g.players[0].x = 160; g.players[0].y = CONFIG.height - 60; g.players[0].setDirection(1, 0);
+  for (let i = 0; i < 300; i++) g.step(1 / 60); // ~5s: p hits the left wall and bounces back
   assert(g.state === State.PLAYING, 'game continues after wall contact');
-  assert(p2.x >= CONFIG.playerRadius && p2.x <= CONFIG.width - CONFIG.playerRadius,
-    'player stays inside arena bounds');
-  assert(approx(p2.x, CONFIG.playerRadius, 0.5), 'player rests against the wall');
+  assert(p.x >= CONFIG.playerRadius && p.x <= CONFIG.width - CONFIG.playerRadius &&
+         p.y >= CONFIG.playerRadius && p.y <= CONFIG.height - CONFIG.playerRadius,
+    'player stays inside the arena bounds');
+  assert(p.dirX > 0, 'player reflected off the left wall (heading reversed outward)');
+  assert(p.x > CONFIG.playerRadius + 1, 'player moves away from the wall, never resting on it');
 }
 
 console.log('trails are decorative: crossing them never ends the round');

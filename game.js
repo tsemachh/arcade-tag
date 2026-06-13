@@ -21,8 +21,9 @@
 
   // ---------- settings (start-screen selectable) ----------
   // opponent: 'cpu' (vs computer) | 'local' (two players, one keyboard) | 'online'
-  const settings = { opponent: 'cpu', difficulty: 'medium', speed: 'normal', gameMode: 'classic' };
+  const settings = { opponent: 'cpu', difficulty: 'medium', speed: 'normal', gameMode: 'classic', radar: false };
   window.__settings = settings; // verification hook
+  const RADAR_FOG = 16; // trail points hidden at each head while radar is on
 
   // ---------- i18n ----------
   const STR = {
@@ -49,6 +50,8 @@
       speedFast: 'מהיר',
       startGame: 'התחל משחק',
       powerups: 'בונוסים: ⚡ האצה · ❄ הקפאת יריב · 👻 היעלמות',
+      radarLabel: 'מכ״ם קולי',
+      radarHint: 'מכ״ם קולי פעיל — אתרו את היריב לפי הצליל',
       hintOnline: 'אונליין — שלטו ב־W,A,S,D או מגע · המארח לוחץ רווח להתחלה · M להשתקה',
       hintAI: 'שחקן 1 — W,A,S,D או מגע · רווח להתחלה · M להשתקה',
       hintLocal: 'שחקן 1 — W,A,S,D · שחקן 2 — חצים · רווח להתחלה · M להשתקה',
@@ -122,6 +125,8 @@
       speedFast: 'Fast',
       startGame: 'Start game',
       powerups: 'Power-ups: ⚡ dash · ❄ freeze · 👻 ghost',
+      radarLabel: 'Sound Radar',
+      radarHint: 'Sound Radar on — find your opponent by ear',
       hintOnline: 'Online — move with W,A,S,D or touch · host presses Space to start · M to mute',
       hintAI: 'Player 1 — W,A,S,D or touch · Space to start · M to mute',
       hintLocal: 'Player 1 — W,A,S,D · Player 2 — arrows · Space to start · M to mute',
@@ -498,19 +503,43 @@
   const RING_COLORS = { chaser: '#ffffff', infected: '#ff5555', safe: '#66ff99' };
 
   /** ring: null | 'chaser' | 'infected' | 'safe' */
+  /** Decoy "spaghetti" laid at round start — drawn only in radar mode, where
+   *  it camouflages the players' real trails so you can't just eyeball them. */
+  function drawDecoys() {
+    if (!settings.radar || !game.decoys || game.state === State.READY) return;
+    ctx.lineWidth = game.cfg.trailWidth;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    for (const d of game.decoys) {
+      const pts = d.pts;
+      for (let i = 1; i < pts.length; i++) {
+        ctx.strokeStyle = `hsl(${(d.hue + i * 7) % 360}, 100%, 55%)`;
+        ctx.beginPath();
+        ctx.moveTo(pts[i - 1].x, pts[i - 1].y);
+        ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.stroke();
+      }
+    }
+  }
+
   function drawPlayer(p, ring) {
     const color = colorAt(game.time);
     ctx.lineWidth = game.cfg.trailWidth;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
     const t = p.trail;
-    for (let i = 1; i < t.length; i++) {
+    // Radar mode (during play): hide the head, ring and live tip, and fog the
+    // most recent trail points — you hunt the opponent by sound + the spaghetti.
+    const radarHide = settings.radar && game.state === State.PLAYING;
+    const end = radarHide ? Math.max(1, t.length - RADAR_FOG) : t.length;
+    for (let i = 1; i < end; i++) {
       ctx.strokeStyle = colorAt(t[i].t);
       ctx.beginPath();
       ctx.moveTo(t[i - 1].x, t[i - 1].y);
       ctx.lineTo(t[i].x, t[i].y);
       ctx.stroke();
     }
+    if (radarHide) return; // nothing more to reveal in radar mode
     if (p.fx && p.fx.ghost > 0) return; // ghosting: no head, no live tip
     if (t.length) {
       ctx.strokeStyle = color;
@@ -654,6 +683,8 @@
     // language toggle button — top-left corner (cx=46 means x=14..78)
     drawButton(lang === 'he' ? 'English' : 'עברית', 46, 12, 64, 24, false,
       () => setLang(lang === 'he' ? 'en' : 'he'));
+    drawButton(t('radarLabel'), canvas.width - 80, 12, 130, 24, settings.radar,
+      () => { settings.radar = !settings.radar; });
     ctx.save();
     ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 18;
     centerText(t('title'), 70, 38);
@@ -747,6 +778,8 @@
     // language toggle button — top-left corner
     drawButton(lang === 'he' ? 'English' : 'עברית', 46, 12, 64, 24, false,
       () => setLang(lang === 'he' ? 'en' : 'he'));
+    drawButton(t('radarLabel'), canvas.width - 80, 12, 130, 24, settings.radar,
+      () => { settings.radar = !settings.radar; });
     ctx.save();
     ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 18;
     centerText(t('title'), 150, 38);
@@ -822,6 +855,7 @@
     ctx.strokeRect(1, 1, canvas.width - 2, canvas.height - 2);
 
     if (game.state !== State.READY) {
+      drawDecoys(); // camouflage behind the real trails (radar mode only)
       drawZone();
       drawPowerups();
       game.players.forEach((p, i) => drawPlayer(p, ringFor(i)));
