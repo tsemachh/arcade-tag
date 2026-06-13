@@ -827,7 +827,7 @@
       game.players.forEach((p, i) => drawPlayer(p, ringFor(i)));
     }
 
-    drawHud();
+    if (game.state !== State.READY) drawHud(); // menu keeps its corners clear for the language toggle
 
     if (game.state === State.PLAYING) {
       // prominent round timer — pulses red when time is almost up
