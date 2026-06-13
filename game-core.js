@@ -44,6 +44,8 @@
     freezeMult: 0.35,
     freezeSeconds: 1.6,
     ghostSeconds: 2.0,
+    wideMult: 3,           // ↔ wide: triples the grabber's catch reach (Arkanoid-style)
+    wideSeconds: 5.0,
     // modes
     infectionPlayers: 4,
     kothZoneRadius: 70,
@@ -89,7 +91,7 @@
       this.x = x; this.y = y;
       this.dirX = dirX; this.dirY = dirY;
       this.trail = [{ x, y, t: t || 0 }];
-      this.fx = { dash: 0, slow: 0, ghost: 0 }; // power-up effect timers (s)
+      this.fx = { dash: 0, slow: 0, ghost: 0, wide: 0 }; // power-up effect timers (s)
     }
     /** Steer to a new direction (any direction allowed, incl. reversal). */
     setDirection(dx, dy) {
@@ -131,7 +133,7 @@
     ROUND_OVER: 'round_over', MATCH_OVER: 'match_over',
   });
 
-  const POWERUP_TYPES = ['dash', 'freeze', 'ghost'];
+  const POWERUP_TYPES = ['dash', 'freeze', 'ghost', 'wide'];
 
   class Game {
     constructor(cfg) {
@@ -259,7 +261,7 @@
         zone: this.zone ? { x: r2(this.zone.x), y: r2(this.zone.y) } : null,
         pu: this.powerups.map(p => ({ x: r2(p.x), y: r2(p.y), type: p.type })),
         pl: this.players.map(p => [r2(p.x), r2(p.y), r3(p.dirX), r3(p.dirY),
-          r3(p.fx.dash), r3(p.fx.slow), r3(p.fx.ghost)]),
+          r3(p.fx.dash), r3(p.fx.slow), r3(p.fx.ghost), r3(p.fx.wide)]),
         ev: this.lastEvent
           ? { type: this.lastEvent.type, x: r2(this.lastEvent.x), y: r2(this.lastEvent.y), time: r3(this.lastEvent.time) }
           : null,
@@ -287,7 +289,7 @@
       for (let i = 0; i < this.players.length; i++) {
         const p = this.players[i], a = s.pl[i];
         p.x = a[0]; p.y = a[1]; p.dirX = a[2]; p.dirY = a[3];
-        p.fx = { dash: a[4], slow: a[5], ghost: a[6] };
+        p.fx = { dash: a[4], slow: a[5], ghost: a[6], wide: a[7] || 0 };
         if (p.fx.ghost > 0) continue; // ghosting: leave no trace (matches host)
         const last = p.trail[p.trail.length - 1];
         if (!last || dist(last.x, last.y, p.x, p.y) >= this.cfg.trailMinGap) {
@@ -333,7 +335,8 @@
         if (pu.type === 'dash') grab.fx.dash = c.dashSeconds;
         else if (pu.type === 'freeze') {
           for (const q of this.players) if (q !== grab) q.fx.slow = c.freezeSeconds;
-        } else grab.fx.ghost = c.ghostSeconds;
+        } else if (pu.type === 'wide') grab.fx.wide = c.wideSeconds;
+        else grab.fx.ghost = c.ghostSeconds;
         this.lastEvent = { type: 'pickup', x: pu.x, y: pu.y, time: this.time };
       }
     }
@@ -371,7 +374,8 @@
         for (let j = 0; j < this.players.length; j++) {
           if (this.infected[j]) continue;
           const a = this.players[i], b = this.players[j];
-          if (dist(a.x, a.y, b.x, b.y) > c.catchRadius) continue;
+          const reach = c.catchRadius * (a.fx.wide > 0 ? c.wideMult : 1);
+          if (dist(a.x, a.y, b.x, b.y) > reach) continue;
           this.infected[j] = true;
           this.lastEvent = { type: 'infect', x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, time: this.time };
           const healthy = [];
@@ -417,6 +421,7 @@
         p.fx.dash = Math.max(0, p.fx.dash - dt);
         p.fx.slow = Math.max(0, p.fx.slow - dt);
         p.fx.ghost = Math.max(0, p.fx.ghost - dt);
+        p.fx.wide = Math.max(0, p.fx.wide - dt);
         p.advance(dt, this.cfg, this.time);
       }
 
@@ -425,8 +430,10 @@
       if (this.mode === 'koth') return this._stepKoth(dt);
       if (this.mode === 'infection') return this._stepInfection(dt);
 
-      // classic — catch: chaser touches runner → chaser wins the round
-      if (this.distanceBetween() <= this.cfg.catchRadius) {
+      // classic — catch: chaser touches runner → chaser wins the round.
+      // The ↔ wide power-up triples the chaser's reach while active.
+      const reach = this.cfg.catchRadius * (this.chaser.fx.wide > 0 ? this.cfg.wideMult : 1);
+      if (this.distanceBetween() <= reach) {
         const a = this.chaser, b = this.runner;
         this.lastEvent = { type: 'catch', x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, time: this.time };
         return this._endRound(this.chaserIndex, 'catch');

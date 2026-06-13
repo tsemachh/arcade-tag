@@ -259,7 +259,7 @@ console.log('power-ups: deterministic spawn (interval, margin, max cap)');
   const pu = g.powerups[0];
   assert(pu.x >= 60 && pu.x <= CONFIG.width - 60 && pu.y >= 60 && pu.y <= CONFIG.height - 60,
     'spawn keeps a 60px margin from the walls');
-  assert(pu.type === 'freeze', 'rand=0.5 deterministically picks the middle type');
+  assert(pu.type === 'ghost', 'rand=0.5 deterministically picks POWERUP_TYPES[2] (ghost) of the four');
 }
 {
   // park both players in corners so nothing gets picked up, spawn aggressively
@@ -325,6 +325,45 @@ console.log('power-ups: ghost stops trail recording, then resumes');
   for (let i = 0; i < 5; i++) g.step(0.5); // ghost expires
   assert(p.fx.ghost === 0, 'ghost expires');
   assert(p.trail.length > len, 'trail recording resumes after ghost ends');
+}
+
+console.log('power-ups: wide pickup triples the chaser catch reach');
+{
+  // pickup sets the effect
+  const g = playingGame({ rand: () => 0.5, roundSeconds: 9999 });
+  const p = g.players[0]; // at (160, 260) heading right
+  g.powerups.push({ x: p.x + 20, y: p.y, type: 'wide' });
+  g.step(0.1); // moves 15px → within pickup range
+  assert(approx(p.fx.wide, CONFIG.wideSeconds), 'wide effect set to wideSeconds on pickup');
+}
+{
+  // a runner just outside the normal reach is NOT caught…
+  const a = playingGame();
+  const ci = a.chaserIndex;
+  a.players[ci].x = 100; a.players[ci].y = 100;
+  a.players[1 - ci].x = 100 + CONFIG.catchRadius + 6; a.players[1 - ci].y = 100;
+  a.step(1 / 60);
+  assert(a.state === State.PLAYING, 'runner just past catchRadius is safe without the power-up');
+  // …but IS caught once the chaser holds the wide effect
+  const b = playingGame();
+  const cj = b.chaserIndex;
+  b.players[cj].x = 100; b.players[cj].y = 100;
+  b.players[1 - cj].x = 100 + CONFIG.catchRadius + 6; b.players[1 - cj].y = 100;
+  b.players[cj].fx.wide = 1.0;
+  b.step(1 / 60);
+  assert(b.state === State.ROUND_OVER && b.lastRoundResult.reason === 'catch',
+    'wide lets the chaser catch from ~3× the range');
+  assert(b.lastRoundResult.winnerIndex === cj, 'the widened chaser wins the round');
+}
+
+console.log('networking: wide effect rides along in the snapshot');
+{
+  const host = playingGame();
+  host.players[host.chaserIndex].fx.wide = 4.0;
+  const guest = new Game();
+  guest.applySnapshot(host.snapshot());
+  assert(approx(guest.players[host.chaserIndex].fx.wide, 4.0, 0.02),
+    'guest mirrors the wide effect timer');
 }
 
 console.log('AI: ghosting foe kills prediction lead (and stays deterministic)');

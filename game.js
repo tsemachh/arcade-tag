@@ -49,7 +49,7 @@
       speedNormal: 'רגיל',
       speedFast: 'מהיר',
       startGame: 'התחל משחק',
-      powerups: 'בונוסים: ⚡ האצה · ❄ הקפאת יריב · 👻 היעלמות',
+      powerups: 'בונוסים: ⚡ האצה · ❄ הקפאה · 👻 היעלמות · ↔ תופס רחב',
       radarLabel: 'מכ״ם קולי',
       radarHint: 'מכ״ם קולי פעיל — אתרו את היריב לפי הצליל',
       hintOnline: 'אונליין — שלטו ב־W,A,S,D או מגע · המארח לוחץ רווח להתחלה · M להשתקה',
@@ -124,7 +124,7 @@
       speedNormal: 'Normal',
       speedFast: 'Fast',
       startGame: 'Start game',
-      powerups: 'Power-ups: ⚡ dash · ❄ freeze · 👻 ghost',
+      powerups: 'Power-ups: ⚡ dash · ❄ freeze · 👻 ghost · ↔ wide catch',
       radarLabel: 'Sound Radar',
       radarHint: 'Sound Radar on — find your opponent by ear',
       hintOnline: 'Online — move with W,A,S,D or touch · host presses Space to start · M to mute',
@@ -548,12 +548,14 @@
       ctx.lineTo(p.x, p.y);
       ctx.stroke();
     }
+    // ↔ wide power-up: the head (and chaser ring) swell to ~3× to show the reach
+    const wf = (p.fx && p.fx.wide > 0) ? game.cfg.wideMult : 1;
     ctx.save();
     ctx.shadowColor = color;
-    ctx.shadowBlur = 12;
+    ctx.shadowBlur = 12 * wf;
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, game.cfg.trailWidth / 2 + 0.5, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, (game.cfg.trailWidth / 2 + 0.5) * wf, 0, Math.PI * 2);
     ctx.fill();
     if (ring) {
       const rc = RING_COLORS[ring] || '#ffffff';
@@ -561,7 +563,7 @@
       ctx.strokeStyle = rc;
       ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, game.cfg.trailWidth / 2 + 5, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, (game.cfg.trailWidth / 2 + 5) * wf, 0, Math.PI * 2);
       ctx.stroke();
     }
     ctx.restore();
@@ -577,6 +579,7 @@
     dash:   { color: '#ffd633', glyph: '⚡' },
     freeze: { color: '#44ddff', glyph: '❄' },
     ghost:  { color: '#bb66ff', glyph: '👻' },
+    wide:   { color: '#ff77aa', glyph: '↔' },
   };
 
   function drawPowerups() {
