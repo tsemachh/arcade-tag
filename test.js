@@ -476,5 +476,85 @@ console.log('AI: explicit target {foeIndex, role} drives multi-player steering')
   assert(a[0] === b[0] && a[1] === b[1], 'default target reproduces the classic behavior');
 }
 
+// ---------- Phase 3: host-authoritative networking ----------
+console.log('networking: host snapshot → guest applySnapshot (classic)');
+{
+  const host = playingGame();
+  host.players[0].setDirection(1, 0);
+  host.players[1].setDirection(-1, 1);
+  for (let i = 0; i < 10; i++) host.step(0.1);
+  const guest = new Game();
+  const changed = guest.applySnapshot(host.snapshot());
+  assert(changed === false, 'matching mode → no rebuild needed');
+  assert(guest.state === host.state, 'guest mirrors state');
+  assert(guest.round === host.round, 'guest mirrors round number');
+  assert(guest.chaserIndex === host.chaserIndex, 'guest mirrors chaser index');
+  assert(approx(guest.players[0].x, host.players[0].x, 0.02) &&
+         approx(guest.players[0].y, host.players[0].y, 0.02),
+    'guest player 0 position matches host (within send rounding)');
+  assert(approx(guest.players[1].x, host.players[1].x, 0.02), 'guest player 1 position matches host');
+  assert(guest.scores[0] === host.scores[0] && guest.scores[1] === host.scores[1], 'guest mirrors scores');
+  assert(guest.players[0].trail.length >= 2, 'guest reconstructs a trail locally from head positions');
+}
+
+console.log('networking: trails accumulate across snapshots; new round resets them');
+{
+  const host = playingGame();
+  const guest = new Game();
+  host.players[0].setDirection(1, 0);
+  for (let i = 0; i < 8; i++) { host.step(0.1); guest.applySnapshot(host.snapshot()); }
+  assert(guest.players[0].trail.length > 2, 'trail accumulates points over multiple snapshots');
+  host.startRound();
+  guest.applySnapshot(host.snapshot());
+  assert(guest.round === host.round, 'guest follows the new round');
+  assert(guest.players[0].trail.length === 1, 'guest resets its trail on a new round');
+}
+
+console.log('networking: ghosting player leaves no guest trail (matches host rule)');
+{
+  const host = playingGame();
+  const guest = new Game();
+  host.players[0].fx.ghost = 1.0;       // start ghosting
+  host.players[0].setDirection(1, 0);
+  guest.applySnapshot(host.snapshot()); // round change reset → trail length 1
+  for (let i = 0; i < 5; i++) { host.step(0.1); guest.applySnapshot(host.snapshot()); }
+  assert(guest.players[0].trail.length === 1, 'no trail points recorded while ghosting');
+}
+
+console.log('networking: koth zone, zoneScore, and powerups round-trip');
+{
+  const host = playingGame({ mode: 'koth' });
+  host.players[0].x = host.zone.x; host.players[0].y = host.zone.y; // sit on the hill
+  host.powerups.push({ x: 123.456, y: 222.0, type: 'dash' });
+  host.step(0.2);
+  const guest = new Game({ mode: 'koth' });
+  guest.applySnapshot(host.snapshot());
+  assert(guest.zone && approx(guest.zone.x, host.zone.x, 0.02), 'guest mirrors the koth zone position');
+  assert(approx(guest.zoneScore[0], host.zoneScore[0], 0.02), 'guest mirrors accumulated zoneScore');
+  assert(guest.powerups.length === host.powerups.length, 'guest mirrors powerup count');
+  assert(guest.powerups[0] && guest.powerups[0].type === 'dash', 'guest mirrors powerup type');
+}
+
+console.log('networking: mode mismatch tells the caller to rebuild');
+{
+  const host = playingGame({ mode: 'koth' });
+  const guest = new Game(); // classic
+  assert(guest.applySnapshot(host.snapshot()) === true, 'mode change returns true (caller rebuilds)');
+  assert(guest.mode === 'classic', 'mirror is untouched until the caller rebuilds it');
+}
+
+console.log('networking: snapshot carries the catch event for guest-side effects');
+{
+  const host = new Game();
+  host.startRound(); host.step(3.01);
+  host.chaser.x = host.runner.x; host.chaser.y = host.runner.y; // force a catch
+  host.step(0.02);
+  const snap = host.snapshot();
+  assert(snap.ev && snap.ev.type === 'catch', 'snapshot reports the catch event with type');
+  assert(typeof snap.ev.x === 'number' && typeof snap.ev.time === 'number',
+    'event carries coords + timestamp for guest dedupe');
+  assert(snap.res && snap.res.reason === 'catch', 'snapshot reports the round result');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -2,6 +2,15 @@
 
 **Play it live: https://tsemachh.github.io/arcade-tag/**
 
+Phase 3 features: **online multiplayer** — pick "אונליין" (online), one
+player hosts and shares a 5-character room code, the other joins by code, and
+the two play real-time tag over WebRTC. Networking is host-authoritative
+(the host runs the simulation and streams ~30 Hz state snapshots; the guest
+sends only its input and renders the snapshots, reconstructing trails
+locally). Transport is PeerJS on its free public broker — no server, no API
+key, no build step. Works for Classic and King of the Hill; falls back
+silently to offline play if the broker can't be reached.
+
 Phase 2 features: three game modes — Classic (קלאסי), King of the Hill
 (מלך הגבעה: hold the moving zone 15s), and Infection (הדבקה: 4 players,
 one starts infected, last healthy player wins); power-ups (⚡ dash,
@@ -49,8 +58,12 @@ machine, distance→tempo/pitch mapping). Node-testable.
 `ai.js` — AI opponent: steering behaviors (predictive pursuit/evasion) with
 wall repulsion, tangential escape, and difficulty presets. Node-testable.
 `game.js` — browser layer: canvas rendering, menu buttons, keyboard + touch
-input, Web Audio.
-`test.js` — core + AI + preset tests: `node test.js` (54 assertions).
+input, Web Audio, and the online host/guest game loop.
+`net.js` — Phase 3 networking: PeerJS wrapper with short room codes,
+host/join, and a single reliable data channel. Loads if PeerJS is present;
+the game runs offline without it.
+`test.js` — core + AI + preset + networking tests: `node test.js`
+(137 assertions, incl. host→guest snapshot round-trips).
 
 ## Deploy
 

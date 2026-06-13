@@ -20,14 +20,30 @@
   const ctx = canvas.getContext('2d');
 
   // ---------- settings (start-screen selectable) ----------
-  const settings = { aiMode: true, difficulty: 'medium', speed: 'normal', gameMode: 'classic' };
+  // opponent: 'cpu' (vs computer) | 'local' (two players, one keyboard) | 'online'
+  const settings = { opponent: 'cpu', difficulty: 'medium', speed: 'normal', gameMode: 'classic' };
   window.__settings = settings; // verification hook
+
+  // Infection is a 4-player vs-computer mode; otherwise the opponent setting rules.
+  function isAI() { return settings.gameMode === 'infection' || settings.opponent === 'cpu'; }
+  function isOnline() { return settings.gameMode !== 'infection' && settings.opponent === 'online'; }
+  const NET = window.Net || null;
+  function netRole() { return NET && NET.isConnected() ? NET.role : null; }
+  function amHost() { return isOnline() && netRole() === 'host'; }
+  function amGuest() { return isOnline() && netRole() === 'guest'; }
 
   function makeGame() {
     return new Game({ width: canvas.width, height: canvas.height, mode: settings.gameMode });
   }
   let game = makeGame();
   window.__game = game; // exposed for automated verification
+
+  // ---------- networking state (Phase 3) ----------
+  const SNAP_INTERVAL = 1 / 30;   // host broadcast / guest input rate (s)
+  let netSendClock = 0;           // throttle accumulator
+  let guestInput = [0, 0];        // host: latest direction received from the guest
+  let seenEventKey = null;        // guest: dedupe one-shot effects across snapshots
+  let netMsg = '';                // status line shown in the online menu panel
 
   /** Rebuild the Game when the selected mode differs (fresh 0:0 match). */
   function syncMode() {
@@ -36,16 +52,17 @@
     window.__game = game;
     effects = [];
     seenEvent = null;
+    seenEventKey = null;
     prevState = game.state;
   }
   window.__setMode = function (m) { // verification hook
     if (m !== 'classic' && m !== 'koth' && m !== 'infection') return;
     settings.gameMode = m;
-    if (m === 'infection') settings.aiMode = true; // infection is vs-computer only
+    if (m === 'infection' && settings.opponent !== 'local') settings.opponent = 'cpu'; // infection: vs-computer only
     syncMode();
   };
 
-  function p2Name() { return settings.aiMode ? 'המחשב' : 'שחקן 2'; }
+  function p2Name() { return isAI() ? 'המחשב' : 'שחקן 2'; }
   function playerName(i) {
     if (game.players.length > 2) return i === 0 ? 'שחקן 1' : `מחשב ${i + 1}`;
     return i === 0 ? 'שחקן 1' : p2Name();
@@ -53,6 +70,65 @@
   function applySpeed() { game.cfg.speed = SPEEDS[settings.speed]; }
 
   let aiTimer = 0;
+
+  // ---------- networking wiring (Phase 3) ----------
+  const NET_STATUS_TEXT = {
+    idle: '', hosting: 'יוצר חדר…', waiting: 'ממתין לשחקן 2…',
+    connecting: 'מתחבר…', connected: 'מחובר ✓', closed: 'החיבור נותק',
+  };
+
+  function onNetStatus(s, err) {
+    netMsg = s === 'error' ? `שגיאה: ${err || 'נכשל'}` : (NET_STATUS_TEXT[s] || '');
+  }
+
+  function onNetConnected() {
+    netMsg = NET_STATUS_TEXT.connected;
+    // Guest mirrors the host's mode/state via snapshots; start from a clean game.
+    if (NET.role === 'guest') { effects = []; seenEvent = null; seenEventKey = null; }
+  }
+
+  function onNetClosed() {
+    netMsg = NET_STATUS_TEXT.closed;
+    guestInput = [0, 0];
+    // If a networked match was in progress, fall back to the menu.
+    if (game.state !== State.READY) { game.resetMatch(); }
+  }
+
+  function onNetData(d) {
+    if (!d || typeof d !== 'object') return;
+    if (NET.role === 'host') {
+      if (d.t === 'in' && Array.isArray(d.d)) guestInput = [d.d[0] || 0, d.d[1] || 0];
+    } else { // guest receives authoritative snapshots
+      if (d.t === 's' && d.snap) {
+        if (settings.gameMode !== d.snap.mode) {
+          settings.gameMode = d.snap.mode; // adopt host's mode, rebuild mirror
+          game = makeGame();
+          window.__game = game;
+          effects = []; seenEvent = null; seenEventKey = null;
+        }
+        game.applySnapshot(d.snap);
+      }
+    }
+  }
+
+  if (NET) {
+    NET.onStatus = onNetStatus;
+    NET.onConnected = onNetConnected;
+    NET.onClosed = onNetClosed;
+    NET.onData = onNetData;
+  }
+
+  function hostGame() {
+    if (!NET) { netMsg = 'אונליין לא זמין'; return; }
+    const code = NET.host();
+    netMsg = code ? `קוד החדר: ${code}` : netMsg;
+  }
+  function joinGame() {
+    if (!NET) { netMsg = 'אונליין לא זמין'; return; }
+    const code = window.prompt('הזן קוד חדר (5 תווים):', '');
+    if (code) NET.join(code);
+  }
+  function leaveOnline() { if (NET) NET.close(); netMsg = ''; }
 
   // ---------- input: keyboard ----------
   const keys = new Set();
@@ -70,6 +146,11 @@
 
   function advanceState() {
     audio.ensureStarted();
+    if (amGuest()) return; // online: the host drives round flow
+    if (isOnline() && !NET.isConnected()) { // need a partner before starting
+      netMsg = 'התחברו תחילה (אירוח או הצטרפות)';
+      return;
+    }
     if (game.state === State.READY) syncMode();
     if (game.state === State.READY || game.state === State.ROUND_OVER) { applySpeed(); game.startRound(); }
     else if (game.state === State.MATCH_OVER) { game.resetMatch(); }
@@ -77,10 +158,10 @@
 
   document.addEventListener('keydown', (e) => {
     if (e.code === 'Space') { e.preventDefault(); advanceState(); return; }
-    if (e.code === 'Escape') { game.resetMatch(); return; } // back to menu anytime
+    if (e.code === 'Escape') { if (!amGuest()) game.resetMatch(); return; } // back to menu anytime
     if (e.code === 'KeyM') { audio.muted = !audio.muted; return; }
-    if (game.state === State.READY && (e.code === 'Digit1' || e.code === 'Digit2')) {
-      settings.aiMode = e.code === 'Digit1' || settings.gameMode === 'infection';
+    if (game.state === State.READY && !isOnline() && (e.code === 'Digit1' || e.code === 'Digit2')) {
+      settings.opponent = (e.code === 'Digit1' || settings.gameMode === 'infection') ? 'cpu' : 'local';
       return;
     }
     keys.add(e.code);
@@ -426,23 +507,32 @@
       { key: 'infection', label: 'הדבקה' },
     ], settings.gameMode, 188, (k) => {
       settings.gameMode = k;
-      if (k === 'infection') settings.aiMode = true;
+      if (k === 'infection' && settings.opponent !== 'local') {
+        if (isOnline()) leaveOnline();
+        settings.opponent = 'cpu'; // infection: vs-computer only
+      }
       syncMode();
     }, 104);
 
     if (settings.gameMode !== 'infection') {
       drawChoiceRow('מצב משחק', [
-        { key: true, label: 'נגד המחשב' },
-        { key: false, label: 'שני שחקנים' },
-      ], settings.aiMode, 240, (k) => { settings.aiMode = k; });
+        { key: 'cpu', label: 'נגד המחשב' },
+        { key: 'local', label: 'שני שחקנים' },
+        { key: 'online', label: 'אונליין' },
+      ], settings.opponent, 240, (k) => {
+        if (k !== 'online' && isOnline()) leaveOnline();
+        settings.opponent = k;
+      }, 92);
     }
 
-    if (settings.aiMode) {
+    if (isAI()) {
       drawChoiceRow('רמת קושי', [
         { key: 'easy', label: 'קל' },
         { key: 'medium', label: 'בינוני' },
         { key: 'hard', label: 'קשה' },
       ], settings.difficulty, 292, (k) => { settings.difficulty = k; });
+    } else if (isOnline()) {
+      drawOnlinePanel(292);
     }
 
     drawChoiceRow('מהירות', [
@@ -459,10 +549,49 @@
     ctx.restore();
 
     centerText('בונוסים: ⚡ האצה · ❄ הקפאת יריב · 👻 היעלמות', 470, 14, '#aaaaaa');
-    centerText(settings.aiMode
-      ? 'שחקן 1 — W,A,S,D או מגע · רווח להתחלה · M להשתקה'
-      : 'שחקן 1 — W,A,S,D · שחקן 2 — חצים · רווח להתחלה · M להשתקה',
+    centerText(isOnline()
+      ? 'אונליין — שלטו ב־W,A,S,D או מגע · המארח לוחץ רווח להתחלה · M להשתקה'
+      : isAI()
+        ? 'שחקן 1 — W,A,S,D או מגע · רווח להתחלה · M להשתקה'
+        : 'שחקן 1 — W,A,S,D · שחקן 2 — חצים · רווח להתחלה · M להשתקה',
       494, 13, '#888888');
+  }
+
+  /** Online (Phase 3) sub-panel: host / join actions, room code, status. */
+  function drawOnlinePanel(y) {
+    const st = NET ? NET.status : 'idle';
+    const connected = NET && NET.isConnected();
+    let line;
+    if (!NET) line = 'אונליין אינו זמין בדפדפן זה';
+    else if (connected) line = NET.role === 'host' ? 'שחקן 2 מחובר ✓ — לחצו "התחל משחק"' : 'מחובר ✓ — ממתין למארח';
+    else if ((st === 'hosting' || st === 'waiting') && NET.code) line = `קוד החדר: ${NET.code} · ${NET_STATUS_TEXT[st]}`;
+    else line = netMsg || 'שחקו מול חבר דרך האינטרנט';
+    centerText(line, y - 6, 14, connected ? '#88ffbb' : (st === 'error' ? '#ff8888' : '#aaaaaa'));
+    if (!NET) return;
+    if (connected) {
+      drawButton('התנתק', canvas.width / 2, y + 6, 130, 30, false, leaveOnline);
+    } else if (st === 'hosting' || st === 'waiting' || st === 'connecting') {
+      drawButton('ביטול', canvas.width / 2, y + 6, 130, 30, false, leaveOnline);
+    } else {
+      const w = 120, h = 30, gap = 12, total = 2 * w + gap;
+      let cx = canvas.width / 2 + total / 2 - w / 2; // rightmost first (RTL)
+      drawButton('אירוח', cx, y + 6, w, h, true, hostGame); cx -= w + gap;
+      drawButton('הצטרפות', cx, y + 6, w, h, false, joinGame);
+    }
+  }
+
+  /** Guest's pre-game screen while the host is still in the menu. */
+  function drawGuestWaiting() {
+    buttons = [];
+    ctx.save();
+    ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 18;
+    centerText('תופסת ארקייד', 150, 38);
+    ctx.restore();
+    centerText('מחוברים לחדר ' + (NET && NET.code ? NET.code : ''), 220, 18, '#88ffbb');
+    const dots = '.'.repeat(1 + (Math.floor(game.time * 2) % 3));
+    centerText('ממתין שהמארח יתחיל את המשחק' + dots, 260, 18);
+    centerText('שלטו בעזרת W,A,S,D או מגע', 300, 14, '#888888');
+    drawButton('התנתק', canvas.width / 2, 340, 130, 32, false, leaveOnline);
   }
 
   function drawJoystick() {
@@ -555,7 +684,7 @@
     }
 
     if (game.state === State.READY) {
-      drawMenu();
+      if (amGuest()) drawGuestWaiting(); else drawMenu();
     } else if (game.state === State.COUNTDOWN) {
       const remain = 3 - game.stateTime;
       const left = Math.ceil(remain);
@@ -616,18 +745,23 @@
         headline = `${who} לקח את הסיבוב — ${why}`;
       }
       centerText(headline, canvas.height / 2 - 30, 26);
-      if (game.state === State.MATCH_OVER) {
+      if (amGuest()) {
+        // online guest: the host controls round flow
+        const dots = '.'.repeat(1 + (Math.floor(game.time * 2) % 3));
+        centerText('ממתין למארח' + dots, canvas.height / 2 + 40, 16, '#aaaaaa');
+      } else if (game.state === State.MATCH_OVER) {
         drawButton('משחק חדש', canvas.width / 2 - 100, canvas.height / 2 + 14, 160, 40, true,
           () => { applySpeed(); game.resetMatch(); game.startRound(); });
         drawButton('מסך הבית', canvas.width / 2 + 100, canvas.height / 2 + 14, 160, 40, false,
           () => game.resetMatch());
+        centerText('רווח להמשך · Esc למסך הבית', canvas.height / 2 + 84, 14, '#888888');
       } else {
         drawButton('לסיבוב הבא', canvas.width / 2 - 100, canvas.height / 2 + 14, 160, 40, true,
           () => { applySpeed(); game.startRound(); });
         drawButton('מסך הבית', canvas.width / 2 + 100, canvas.height / 2 + 14, 160, 40, false,
           () => game.resetMatch());
+        centerText('רווח להמשך · Esc למסך הבית', canvas.height / 2 + 84, 14, '#888888');
       }
-      centerText('רווח להמשך · Esc למסך הבית', canvas.height / 2 + 84, 14, '#888888');
     }
 
     drawEffects(dt);
@@ -676,22 +810,56 @@
     }
   }
 
+  /** Read the local player's intended direction (joystick > keys). */
+  function localInput() {
+    if (joy) {
+      const dx = joy.x - joy.ax, dy = joy.y - joy.ay;
+      if (Math.hypot(dx, dy) > 12) return [dx, dy];
+      return [0, 0];
+    }
+    return dirFor(P1);
+  }
+
+  /** Guest: spawn a catch/pickup effect once per host event (deduped by id). */
+  function handleGuestEvent() {
+    const ev = game.lastEvent;
+    if (!ev) return;
+    const key = ev.type + '@' + (ev.time != null ? ev.time.toFixed(3) : '');
+    if (key !== seenEventKey) { seenEventKey = key; spawnEffect(ev); }
+  }
+
   // ---------- main loop ----------
   let last = performance.now();
   let prevState = game.state;
   function frame(now) {
     const dt = Math.min((now - last) / 1000, 0.05);
     last = now;
-    if (game.state === State.PLAYING) {
-      // P1: floating joystick (if active) takes priority over keys
-      if (joy) {
-        const dx = joy.x - joy.ax, dy = joy.y - joy.ay;
-        if (Math.hypot(dx, dy) > 12) game.players[0].setDirection(dx, dy);
-      } else {
-        const [d1x, d1y] = dirFor(P1);
-        game.players[0].setDirection(d1x, d1y);
+
+    if (amGuest()) {
+      // Thin client: never steps the sim — it only sends input and renders
+      // the authoritative snapshots that arrive over the data channel.
+      let gx = 0, gy = 0;
+      if (game.state === State.PLAYING) { const [a, b] = localInput(); gx = a; gy = b; }
+      netSendClock += dt;
+      if (netSendClock >= SNAP_INTERVAL) { netSendClock = 0; NET.send({ t: 'in', d: [gx, gy] }); }
+      handleGuestEvent();
+      if ((game.state === State.ROUND_OVER || game.state === State.MATCH_OVER) && prevState === State.PLAYING) {
+        audio.catchJingle();
       }
-      if (settings.aiMode || game.mode === 'infection') {
+      prevState = game.state;
+      audio.schedule();
+      draw(dt);
+      window.__buttons = buttons;
+      requestAnimationFrame(frame);
+      return;
+    }
+
+    if (game.state === State.PLAYING) {
+      const [d1x, d1y] = localInput();
+      game.players[0].setDirection(d1x, d1y);
+      if (amHost()) {
+        game.players[1].setDirection(guestInput[0], guestInput[1]); // remote player
+      } else if (isAI()) {
         driveAI(dt);
       } else {
         const [d2x, d2y] = dirFor(P2);
@@ -707,6 +875,12 @@
       audio.catchJingle();
     }
     prevState = game.state;
+    // Host: broadcast authoritative state to the guest (throttled), in every
+    // game state so the guest mirrors the menu, countdown, play, and results.
+    if (amHost()) {
+      netSendClock += dt;
+      if (netSendClock >= SNAP_INTERVAL) { netSendClock = 0; NET.send({ t: 's', snap: game.snapshot() }); }
+    }
     audio.schedule();
     draw(dt);
     window.__buttons = buttons; // verification hook (current hit targets)

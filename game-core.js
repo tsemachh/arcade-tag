@@ -204,6 +204,61 @@
       return audioFromDistance(this.distanceBetween(), this.cfg);
     }
 
+    // ---------- networking (host-authoritative state sync) ----------
+    /** Compact authoritative state for the guest. Trails are NOT sent — the
+     *  guest reconstructs them locally from successive head positions, so the
+     *  payload stays tiny (a few hundred bytes) regardless of round length. */
+    snapshot() {
+      const r2 = (v) => Math.round(v * 100) / 100;
+      const r3 = (v) => Math.round(v * 1000) / 1000;
+      return {
+        mode: this.mode,
+        st: this.state, sTime: r3(this.stateTime), time: r3(this.time),
+        round: this.round, ci: this.chaserIndex,
+        sc: this.scores.slice(),
+        zs: this.zoneScore.map(r3),
+        inf: this.infected.slice(),
+        zone: this.zone ? { x: r2(this.zone.x), y: r2(this.zone.y) } : null,
+        pu: this.powerups.map(p => ({ x: r2(p.x), y: r2(p.y), type: p.type })),
+        pl: this.players.map(p => [r2(p.x), r2(p.y), r3(p.dirX), r3(p.dirY),
+          r3(p.fx.dash), r3(p.fx.slow), r3(p.fx.ghost)]),
+        ev: this.lastEvent
+          ? { type: this.lastEvent.type, x: r2(this.lastEvent.x), y: r2(this.lastEvent.y), time: r3(this.lastEvent.time) }
+          : null,
+        res: this.lastRoundResult
+          ? { winnerIndex: this.lastRoundResult.winnerIndex, reason: this.lastRoundResult.reason }
+          : null,
+      };
+    }
+
+    /** Apply a host snapshot to this (guest) game and grow trails locally.
+     *  Returns true if the mode changed (caller should rebuild the Game). */
+    applySnapshot(s) {
+      if (s.mode !== this.mode) return true; // caller rebuilds with the new mode
+      const roundChanged = s.round !== this.round;
+      if (roundChanged) this._resetPositions(); // clears trails to a single point
+      this.state = s.st; this.stateTime = s.sTime; this.time = s.time;
+      this.round = s.round; this.chaserIndex = s.ci;
+      this.scores = s.sc.slice();
+      this.zoneScore = s.zs.slice();
+      this.infected = s.inf.slice();
+      this.zone = s.zone ? { x: s.zone.x, y: s.zone.y } : null;
+      this.powerups = s.pu.map(p => ({ x: p.x, y: p.y, type: p.type }));
+      this.lastRoundResult = s.res ? { winnerIndex: s.res.winnerIndex, reason: s.res.reason } : null;
+      this.lastEvent = s.ev ? { type: s.ev.type, x: s.ev.x, y: s.ev.y, time: s.ev.time } : this.lastEvent;
+      for (let i = 0; i < this.players.length; i++) {
+        const p = this.players[i], a = s.pl[i];
+        p.x = a[0]; p.y = a[1]; p.dirX = a[2]; p.dirY = a[3];
+        p.fx = { dash: a[4], slow: a[5], ghost: a[6] };
+        if (p.fx.ghost > 0) continue; // ghosting: leave no trace (matches host)
+        const last = p.trail[p.trail.length - 1];
+        if (!last || dist(last.x, last.y, p.x, p.y) >= this.cfg.trailMinGap) {
+          p.trail.push({ x: p.x, y: p.y, t: s.time });
+        }
+      }
+      return false;
+    }
+
     /** Seconds left before the round resolves by timeout (0 when not playing). */
     timeLeft() {
       if (this.state !== State.PLAYING) return 0;

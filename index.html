@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Arcade Tag — Phase 1 MVP</title>
+  <title>Arcade Tag — תופסת ארקייד</title>
   <style>
     html, body { margin: 0; height: 100%; background: #111; display: flex;
                  align-items: center; justify-content: center; overflow: hidden; }
@@ -14,8 +14,12 @@
 </head>
 <body>
   <canvas id="arena" width="800" height="520"></canvas>
+  <!-- PeerJS (WebRTC broker) for Phase 3 online multiplayer. Optional:
+       if it fails to load, the game still runs offline (vs computer / local 2P). -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <script src="game-core.js"></script>
   <script src="ai.js"></script>
+  <script src="net.js"></script>
   <script src="game.js"></script>
 </body>
 </html>
