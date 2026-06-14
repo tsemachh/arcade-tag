@@ -582,13 +582,29 @@
         this.nextNoteTime += noteIntervalMs / 1000;
       }
     },
-    /** Play the opening of the current theme once — a menu audition. */
+    /** Audition the current theme (~3.5s, looping). Cancels any in-flight
+     *  preview so rapidly switching tunes doesn't stack them up. */
     preview() {
       this.ensureStarted();
       if (!this.ctx || this.muted) return;
-      let t = this.ctx.currentTime + 0.04, k = 0;
-      for (let i = 0; i < this.notes.length && k < 8; i++) {
-        if (this.notes[i] > 0) { this.blip(this.notes[i], t); t += 0.14; k++; }
+      if (!this._previewOscs) this._previewOscs = [];
+      const now = this.ctx.currentTime;
+      for (const o of this._previewOscs) { try { o.stop(now); } catch (e) {} }
+      this._previewOscs = [];
+      const step = 0.135, n = Math.round(3.5 / step);
+      let t = now + 0.05;
+      for (let k = 0; k < n; k++) {
+        const f = this.notes[k % this.notes.length];
+        if (f > 0) {
+          const osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
+          osc.type = 'square'; osc.frequency.value = f;
+          gain.gain.setValueAtTime(0.12, t);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+          osc.connect(gain).connect(this.ctx.destination);
+          osc.start(t); osc.stop(t + 0.1);
+          this._previewOscs.push(osc);
+        }
+        t += step;
       }
     },
     catchJingle() {
