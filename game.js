@@ -21,7 +21,8 @@
 
   // ---------- settings (start-screen selectable) ----------
   // opponent: 'cpu' (vs computer) | 'local' (two players, one keyboard) | 'online'
-  const settings = { opponent: 'cpu', difficulty: 'medium', speed: 'normal', gameMode: 'classic', radar: false };
+  const settings = { opponent: 'cpu', difficulty: 'medium', speed: 'normal', gameMode: 'classic', radar: false, theme: 'invaders' };
+  try { const sv = localStorage.getItem('arcadeTagTheme'); if (sv) settings.theme = sv; } catch (e) {}
   window.__settings = settings; // verification hook
   const RADAR_FOG = 16; // trail points hidden at each head while radar is on
 
@@ -390,9 +391,24 @@
   canvas.addEventListener('touchcancel', endTouch);
 
   // ---------- adaptive audio (POKEY-style square ostinato) ----------
+  // Selectable chiptune themes. Each is a MIDI-note loop (0 = rest); tempo and
+  // pitch are still driven by how close the players are — the sonar.
+  const midiHz = (n) => 440 * Math.pow(2, (n - 69) / 12);
+  const THEME_NOTES = {
+    invaders: [40, 38, 36, 35],                                  // Space Invaders homage (descending)
+    // J.S. Bach — Toccata & Fugue in D minor, BWV 565 (public domain).
+    // The tune the Gyruss arcade machine actually used.
+    toccata:  [57, 55, 57, 0, 55, 53, 52, 50, 49, 50, 0, 0],
+    climber:  [48, 52, 55, 60, 59, 55, 52, 55],                  // original — bouncy "climb the girders" spirit
+    caper:    [45, 49, 52, 49, 45, 52, 50, 47],                  // original — jaunty "beat-cop caper" chase
+  };
+  const THEME_HZ = {};
+  for (const k in THEME_NOTES) THEME_HZ[k] = THEME_NOTES[k].map(n => (n > 0 ? midiHz(n) : 0));
+
   const audio = {
     ctx: null, muted: false, nextNoteTime: 0, noteIndex: 0,
-    notes: [82.41, 73.42, 65.41, 61.74], // E2 D2 C2 B1 — Space Invaders homage
+    notes: THEME_HZ.invaders,
+    setTheme(name) { this.notes = THEME_HZ[name] || THEME_HZ.invaders; this.noteIndex = 0; },
     ensureStarted() {
       if (this.ctx) return;
       const AC = window.AudioContext || window.webkitAudioContext;
@@ -416,9 +432,19 @@
       const lookahead = this.ctx.currentTime + 0.12;
       while (this.nextNoteTime < lookahead) {
         if (this.nextNoteTime < this.ctx.currentTime) this.nextNoteTime = this.ctx.currentTime;
-        this.blip(this.notes[this.noteIndex % this.notes.length] * pitchMult, this.nextNoteTime);
+        const f = this.notes[this.noteIndex % this.notes.length];
+        if (f > 0) this.blip(f * pitchMult, this.nextNoteTime); // 0 = rest
         this.noteIndex += 1;
         this.nextNoteTime += noteIntervalMs / 1000;
+      }
+    },
+    /** Play the opening of the current theme once — a menu audition. */
+    preview() {
+      this.ensureStarted();
+      if (!this.ctx || this.muted) return;
+      let t = this.ctx.currentTime + 0.04, k = 0;
+      for (let i = 0; i < this.notes.length && k < 8; i++) {
+        if (this.notes[i] > 0) { this.blip(this.notes[i], t); t += 0.14; k++; }
       }
     },
     catchJingle() {
@@ -427,6 +453,18 @@
       [523.25, 659.25, 783.99].forEach((f, i) => this.blip(f, t + i * 0.09));
     },
   };
+
+  audio.setTheme(settings.theme);
+  const THEME_ORDER = ['invaders', 'toccata', 'climber', 'caper'];
+  const THEME_NAMES = { invaders: 'Invaders', toccata: 'Toccata', climber: 'Climber', caper: 'Caper' };
+  function cycleTheme() {
+    const i = THEME_ORDER.indexOf(settings.theme);
+    settings.theme = THEME_ORDER[(i + 1) % THEME_ORDER.length];
+    try { localStorage.setItem('arcadeTagTheme', settings.theme); } catch (e) {}
+    audio.setTheme(settings.theme);
+    audio.preview(); // audition the new theme right away (the tap is a user gesture)
+  }
+  window.__cycleTheme = cycleTheme; // verification hook
 
   // ---------- event effects (catch / infect / pickup) ----------
   let effects = [];   // {kind: 'boom'|'pop', x, y, t} — t is a local clock (s)
@@ -688,6 +726,7 @@
       () => setLang(lang === 'he' ? 'en' : 'he'));
     drawButton(t('radarLabel'), canvas.width - 80, 12, 130, 24, settings.radar,
       () => { settings.radar = !settings.radar; });
+    drawButton('♪ ' + THEME_NAMES[settings.theme], canvas.width - 80, 44, 130, 24, false, cycleTheme);
     ctx.save();
     ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 18;
     centerText(t('title'), 70, 38);
@@ -783,6 +822,7 @@
       () => setLang(lang === 'he' ? 'en' : 'he'));
     drawButton(t('radarLabel'), canvas.width - 80, 12, 130, 24, settings.radar,
       () => { settings.radar = !settings.radar; });
+    drawButton('♪ ' + THEME_NAMES[settings.theme], canvas.width - 80, 44, 130, 24, false, cycleTheme);
     ctx.save();
     ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 18;
     centerText(t('title'), 150, 38);
