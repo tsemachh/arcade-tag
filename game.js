@@ -77,8 +77,8 @@
       powerups: 'בונוסים: ⚡ האצה · ❄ הקפאה · 👻 היעלמות · ↔ תופס רחב',
       radarLabel: 'מכ״ם קולי',
       radarHint: 'מכ״ם קולי פעיל — אתרו את היריב לפי הצליל',
-      hintOnline: 'אונליין — שלטו ב־W,A,S,D או מגע · המארח לוחץ רווח להתחלה · M להשתקה',
-      hintAI: 'שחקן 1 — W,A,S,D או מגע · רווח להתחלה · M להשתקה',
+      hintOnline: 'אונליין — חצים / W,A,S,D / מגע · המארח לוחץ רווח להתחלה · M להשתקה',
+      hintAI: 'שחקן 1 — חצים / W,A,S,D / מגע · רווח להתחלה · M להשתקה',
       hintLocal: 'שחקן 1 — W,A,S,D · שחקן 2 — חצים · רווח להתחלה · M להשתקה',
       onlineUnavailableBrowser: 'אונליין אינו זמין בדפדפן זה',
       hostConnectedStart: 'שחקן 2 מחובר ✓ — לחצו "התחל משחק"',
@@ -124,7 +124,7 @@
       help1: 'הרודף (טבעת לבנה) מנסה לתפוס את הבורח לפני שייגמר הזמן.',
       help2: 'אתם תמיד בתנועה — אפשר רק לכוון, אי אפשר לעצור. הקירות מקפיצים אתכם.',
       help3: 'אספו בונוסים: ⚡ האצה · ❄ הקפאה · 👻 היעלמות · ↔ תופס רחב. השובלים לקישוט.',
-      help4: 'שחקן 1: W,A,S,D או מגע · שחקן 2: חצים · רווח: התחלה · M: השתקה',
+      help4: 'תנועה: חצים / W,A,S,D / מגע · ב־2 שחקנים: P2 בחצים · רווח: התחלה',
       gotIt: 'הבנתי',
       chasesRunner: (chaser, runner) => `${chaser} רודף את ${runner}`,
       startsInfected: (name) => `${name} מתחיל נגוע — ברחו!`,
@@ -160,8 +160,8 @@
       powerups: 'Power-ups: ⚡ dash · ❄ freeze · 👻 ghost · ↔ wide catch',
       radarLabel: 'Sound Radar',
       radarHint: 'Sound Radar on — find your opponent by ear',
-      hintOnline: 'Online — move with W,A,S,D or touch · host presses Space to start · M to mute',
-      hintAI: 'Player 1 — W,A,S,D or touch · Space to start · M to mute',
+      hintOnline: 'Online — arrows / W,A,S,D / touch · host presses Space to start · M to mute',
+      hintAI: 'Player 1 — arrows / W,A,S,D / touch · Space to start · M to mute',
       hintLocal: 'Player 1 — W,A,S,D · Player 2 — arrows · Space to start · M to mute',
       onlineUnavailableBrowser: 'Online is unavailable in this browser',
       hostConnectedStart: 'Player 2 connected ✓ — press "Start game"',
@@ -207,7 +207,7 @@
       help1: 'The chaser (white ring) tries to tag the runner before time runs out.',
       help2: "You're always moving — steer, you can't stop. Walls bounce you back.",
       help3: 'Grab power-ups: ⚡ dash · ❄ freeze · 👻 ghost · ↔ wide. Trails are decoration.',
-      help4: 'P1: W,A,S,D or touch · P2: arrows · Space: start · M: mute',
+      help4: 'Move: arrows / W,A,S,D / touch · local 2P: P2 uses arrows · Space: start',
       gotIt: 'Got it',
       chasesRunner: (chaser, runner) => `${chaser} chases ${runner}`,
       startsInfected: (name) => `${name} starts infected — run!`,
@@ -366,6 +366,19 @@
     return [dx, dy];
   }
 
+  /** Player 1's direction. Single-player (vs CPU / online) accepts BOTH the
+   *  arrow keys and W,A,S,D — arrows are the more intuitive default for one
+   *  player. Local two-player keeps P1 on W,A,S,D so P2 owns the arrows. */
+  function p1Dir() {
+    if (settings.opponent === 'local' && settings.gameMode !== 'infection') return dirFor(P1);
+    let dx = 0, dy = 0;
+    if (keys.has('KeyA') || keys.has('ArrowLeft')) dx -= 1;
+    if (keys.has('KeyD') || keys.has('ArrowRight')) dx += 1;
+    if (keys.has('KeyW') || keys.has('ArrowUp')) dy -= 1;
+    if (keys.has('KeyS') || keys.has('ArrowDown')) dy += 1;
+    return [dx, dy];
+  }
+
   function advanceState() {
     audio.ensureStarted();
     if (amGuest()) return; // online: the host drives round flow
@@ -386,6 +399,7 @@
       settings.opponent = (e.code === 'Digit1' || settings.gameMode === 'infection') ? 'cpu' : 'local';
       return;
     }
+    if (e.code.indexOf('Arrow') === 0) e.preventDefault(); // arrows steer, not scroll
     keys.add(e.code);
   });
   document.addEventListener('keyup', (e) => keys.delete(e.code));
@@ -1175,7 +1189,7 @@
       if (Math.hypot(dx, dy) > 12) return [dx, dy];
       return [0, 0];
     }
-    return dirFor(P1);
+    return p1Dir();
   }
 
   /** Guest: spawn a catch/pickup effect once per host event (deduped by id). */
