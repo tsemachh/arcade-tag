@@ -55,6 +55,12 @@ heads between snapshots for smooth motion. Transport is PeerJS on its free
 public broker — no server, no API key. Falls back silently to offline play if
 the broker can't be reached.
 
+**Network note:** the free broker provides signaling + STUN but no TURN relay,
+so online play currently works reliably when both players are on the **same
+Wi-Fi / network**. Cross-network play (e.g. cellular ↔ home Wi-Fi, or two
+different houses) needs TURN servers — adding a few ICE `iceServers` entries in
+`net.js` is the planned upgrade to make the invite link work anywhere.
+
 ## Run / hack locally
 
 Open `index.html` in a browser. No build step. Logic tests:

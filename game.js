@@ -84,6 +84,7 @@
       hostConnectedStart: 'שחקן 2 מחובר ✓ — לחצו "התחל משחק"',
       guestConnectedWaiting: 'מחובר ✓ — ממתין למארח',
       playFriend: 'שחקו מול חבר דרך האינטרנט',
+      onlineWifiTip: 'טיפ: בינתיים עובד הכי טוב באותו Wi-Fi',
       btnCopyLink: '🔗 העתק קישור הזמנה',
       linkCopied: 'הקישור הועתק ✓ — שלחו אותו לחבר',
       btnHost: 'אירוח',
@@ -170,6 +171,7 @@
       hostConnectedStart: 'Player 2 connected ✓ — press "Start game"',
       guestConnectedWaiting: 'Connected ✓ — waiting for host',
       playFriend: 'Play a friend over the internet',
+      onlineWifiTip: 'Tip: best on the same Wi-Fi for now',
       btnCopyLink: '🔗 Copy invite link',
       linkCopied: 'Invite link copied ✓ — send it to a friend',
       btnHost: 'Host',
@@ -1003,6 +1005,7 @@
       drawButton(t('btnHost'), cx, y + 6, w, h, true, hostGame); cx -= w + gap;
       drawButton(t('btnJoin'), cx, y + 6, w, h, false, joinGame);
     }
+    if (!connected && st !== 'error') centerText(t('onlineWifiTip'), y + 44, 10, '#777777');
   }
 
   /** Guest's pre-game screen while the host is still in the menu. */
