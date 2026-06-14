@@ -23,8 +23,32 @@
   // opponent: 'cpu' (vs computer) | 'local' (two players, one keyboard) | 'online'
   const settings = { opponent: 'cpu', difficulty: 'medium', speed: 'normal', gameMode: 'classic', radar: false, theme: 'invaders' };
   try { const sv = localStorage.getItem('arcadeTagTheme'); if (sv) settings.theme = sv; } catch (e) {}
+  // Restore the player's last choices so the menu opens where they left off.
+  (function loadSettings() {
+    try {
+      const s = JSON.parse(localStorage.getItem('arcadeTagSettings') || '{}');
+      const pick = (v, set, cur) => (set.indexOf(v) >= 0 ? v : cur);
+      settings.opponent = pick(s.opponent, ['cpu', 'local', 'online'], settings.opponent);
+      settings.gameMode = pick(s.gameMode, ['classic', 'koth', 'infection'], settings.gameMode);
+      settings.difficulty = pick(s.difficulty, ['easy', 'medium', 'hard'], settings.difficulty);
+      settings.speed = pick(s.speed, ['slow', 'normal', 'fast'], settings.speed);
+    } catch (e) {}
+  })();
+  function saveSettings() {
+    try {
+      localStorage.setItem('arcadeTagSettings', JSON.stringify({
+        opponent: settings.opponent, gameMode: settings.gameMode,
+        difficulty: settings.difficulty, speed: settings.speed,
+      }));
+    } catch (e) {}
+  }
   window.__settings = settings; // verification hook
   const RADAR_FOG = 16; // trail points hidden at each head while radar is on
+
+  // onboarding: show the how-to overlay once for first-time visitors
+  let showHelp = false;
+  try { showHelp = !localStorage.getItem('arcadeTagSeen'); } catch (e) {}
+  function dismissHelp() { showHelp = false; try { localStorage.setItem('arcadeTagSeen', '1'); } catch (e) {} }
 
   // ---------- i18n ----------
   const STR = {
@@ -96,6 +120,12 @@
       connectedRoom: (c) => `מחוברים לחדר ${c}`,
       waitHostStart: 'ממתין שהמארח יתחיל את המשחק',
       moveControls: 'שלטו בעזרת W,A,S,D או מגע',
+      helpTitle: 'איך משחקים',
+      help1: 'הרודף (טבעת לבנה) מנסה לתפוס את הבורח לפני שייגמר הזמן.',
+      help2: 'אתם תמיד בתנועה — אפשר רק לכוון, אי אפשר לעצור. הקירות מקפיצים אתכם.',
+      help3: 'אספו בונוסים: ⚡ האצה · ❄ הקפאה · 👻 היעלמות · ↔ תופס רחב. השובלים לקישוט.',
+      help4: 'שחקן 1: W,A,S,D או מגע · שחקן 2: חצים · רווח: התחלה · M: השתקה',
+      gotIt: 'הבנתי',
       chasesRunner: (chaser, runner) => `${chaser} רודף את ${runner}`,
       startsInfected: (name) => `${name} מתחיל נגוע — ברחו!`,
       wonMatch: (who) => `${who} ניצח את המשחק!`,
@@ -173,6 +203,12 @@
       connectedRoom: (c) => `Connected to room ${c}`,
       waitHostStart: 'Waiting for the host to start',
       moveControls: 'Move with W,A,S,D or touch',
+      helpTitle: 'How to play',
+      help1: 'The chaser (white ring) tries to tag the runner before time runs out.',
+      help2: "You're always moving — steer, you can't stop. Walls bounce you back.",
+      help3: 'Grab power-ups: ⚡ dash · ❄ freeze · 👻 ghost · ↔ wide. Trails are decoration.',
+      help4: 'P1: W,A,S,D or touch · P2: arrows · Space: start · M: mute',
+      gotIt: 'Got it',
       chasesRunner: (chaser, runner) => `${chaser} chases ${runner}`,
       startsInfected: (name) => `${name} starts infected — run!`,
       wonMatch: (who) => `${who} won the match!`,
@@ -337,13 +373,13 @@
       netMsg = t('connectFirst');
       return;
     }
-    if (game.state === State.READY) syncMode();
+    if (game.state === State.READY) { syncMode(); saveSettings(); }
     if (game.state === State.READY || game.state === State.ROUND_OVER) { applySpeed(); game.startRound(); }
     else if (game.state === State.MATCH_OVER) { game.resetMatch(); }
   }
 
   document.addEventListener('keydown', (e) => {
-    if (e.code === 'Space') { e.preventDefault(); advanceState(); return; }
+    if (e.code === 'Space') { e.preventDefault(); if (showHelp) { dismissHelp(); return; } advanceState(); return; }
     if (e.code === 'Escape') { if (!amGuest()) game.resetMatch(); return; } // back to menu anytime
     if (e.code === 'KeyM') { audio.muted = !audio.muted; return; }
     if (game.state === State.READY && !isOnline() && (e.code === 'Digit1' || e.code === 'Digit2')) {
@@ -368,7 +404,7 @@
     audio.ensureStarted();
     if (game.state === State.READY || game.state === State.ROUND_OVER || game.state === State.MATCH_OVER) {
       const b = buttons.find(b => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h);
-      if (b) { b.fn(); return; }
+      if (b) { b.fn(); if (game.state === State.READY) saveSettings(); return; }
       // tap anywhere else still advances between rounds
       if (game.state === State.ROUND_OVER) { applySpeed(); game.startRound(); }
     }
@@ -834,6 +870,28 @@
         ? t('hintAI')
         : t('hintLocal'),
       494, 13, '#888888');
+    drawButton('?', 30, 44, 32, 24, false, () => { showHelp = true; }); // reopen how-to
+  }
+
+  /** First-run (or '?'-triggered) how-to-play overlay drawn over the menu. */
+  function drawHelpOverlay() {
+    buttons = []; // the overlay captures all taps while it is open
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.restore();
+    ctx.save();
+    ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 16;
+    centerText(t('helpTitle'), 120, 34);
+    ctx.restore();
+    centerText(t('help1'), 188, 17);
+    centerText(t('help2'), 220, 17);
+    centerText(t('help3'), 256, 16, '#cccccc');
+    centerText(t('help4'), 300, 15, '#999999');
+    ctx.save();
+    ctx.shadowColor = colorAt(game.time); ctx.shadowBlur = 16;
+    drawButton(t('gotIt'), canvas.width / 2, 360, 160, 44, true, dismissHelp);
+    ctx.restore();
   }
 
   /** Online (Phase 3) sub-panel: host / join actions, room code, status. */
@@ -983,7 +1041,8 @@
     }
 
     if (game.state === State.READY) {
-      if (amGuest()) drawGuestWaiting(); else drawMenu();
+      if (amGuest()) drawGuestWaiting();
+      else { drawMenu(); if (showHelp) drawHelpOverlay(); }
     } else if (game.state === State.COUNTDOWN) {
       const remain = 3 - game.stateTime;
       const left = Math.ceil(remain);
