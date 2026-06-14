@@ -21,8 +21,9 @@
 
   // ---------- settings (start-screen selectable) ----------
   // opponent: 'cpu' (vs computer) | 'local' (two players, one keyboard) | 'online'
-  const settings = { opponent: 'cpu', difficulty: 'medium', speed: 'normal', gameMode: 'classic', radar: false, theme: 'invaders' };
+  const settings = { opponent: 'cpu', difficulty: 'medium', speed: 'normal', gameMode: 'classic', radar: true, theme: 'boulder' };
   try { const sv = localStorage.getItem('arcadeTagTheme'); if (sv) settings.theme = sv; } catch (e) {}
+  try { const rv = localStorage.getItem('arcadeTagRadar'); if (rv !== null) settings.radar = rv === '1'; } catch (e) {}
   // Restore the player's last choices so the menu opens where they left off.
   (function loadSettings() {
     try {
@@ -937,7 +938,7 @@
     drawButton(lang === 'he' ? 'English' : 'עברית', 46, 12, 64, 24, false,
       () => setLang(lang === 'he' ? 'en' : 'he'));
     drawButton(t('radarLabel'), canvas.width - 80, 12, 130, 24, settings.radar,
-      () => { settings.radar = !settings.radar; });
+      () => { settings.radar = !settings.radar; try { localStorage.setItem('arcadeTagRadar', settings.radar ? '1' : '0'); } catch (e) {} });
     drawButton('♪ ' + THEME_NAMES[settings.theme], canvas.width - 80, 44, 130, 24, false, cycleTheme);
     ctx.save();
     ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 18;
@@ -1082,7 +1083,7 @@
     drawButton(lang === 'he' ? 'English' : 'עברית', 46, 12, 64, 24, false,
       () => setLang(lang === 'he' ? 'en' : 'he'));
     drawButton(t('radarLabel'), canvas.width - 80, 12, 130, 24, settings.radar,
-      () => { settings.radar = !settings.radar; });
+      () => { settings.radar = !settings.radar; try { localStorage.setItem('arcadeTagRadar', settings.radar ? '1' : '0'); } catch (e) {} });
     drawButton('♪ ' + THEME_NAMES[settings.theme], canvas.width - 80, 44, 130, 24, false, cycleTheme);
     ctx.save();
     ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 18;
