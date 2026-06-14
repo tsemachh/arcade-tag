@@ -535,6 +535,16 @@
     toccata:  [57, 55, 57, 0, 55, 53, 52, 50, 49, 50, 0, 0],
     climber:  [48, 52, 55, 60, 59, 55, 52, 55],                  // original — bouncy "climb the girders" spirit
     caper:    [45, 49, 52, 49, 45, 52, 50, 47],                  // original — jaunty "beat-cop caper" chase
+    // Melodies extracted from classic arcade MIDIs (top voice, transposed to the chiptune range).
+    gyruss:    [69, 67, 69, 67, 65, 64, 62, 61, 62, 49, 37, 40, 43, 46, 49, 52, 50, 40, 42, 45, 50, 57, 52, 57, 53, 57, 50, 57, 52, 57, 53, 57, 55, 57, 52, 57, 53, 57, 55, 57],
+    gyrussb:   [57, 57, 57, 57, 53, 52, 50, 49, 50, 50, 49, 52, 57, 58, 61, 64, 54, 52, 50, 38, 45, 38, 45, 38, 45, 38, 45, 38, 69, 68, 67, 66, 65, 64, 63, 62, 61, 60, 59, 58],
+    pacman:    [52, 51, 49, 47, 51, 49, 52, 51, 52, 54, 51, 49, 51, 52, 49, 51, 52, 54, 51, 52, 54, 56, 58, 59, 58, 59, 59],
+    polepos:   [54, 54, 54, 54, 56, 52, 49, 47, 49, 52, 54, 54, 56, 52, 49, 47, 49, 52, 54, 57, 59, 61, 61],
+    mrdo:      [55, 60, 59, 57, 55, 55, 55, 55, 53, 57, 55, 53, 52, 50, 52, 53, 55, 57, 60, 59, 59, 57, 59, 55, 55],
+    pooyan:    [55, 57, 59, 60, 55, 52, 48, 57, 59, 57, 55, 53, 52, 50, 48, 48],
+    montezuma: [47, 47, 47, 52, 56, 56],
+    boulder:   [45, 33, 49, 52, 57, 47, 50, 52, 59, 53, 55, 57, 60, 55, 66, 56, 64, 45, 57, 40, 47, 43, 59, 47, 43, 45, 57, 40, 47, 53, 69, 57, 53, 43, 55, 38, 45, 51, 67, 55],
+    vanguard:  [51, 58, 60, 58, 57, 58, 60, 58, 57, 58, 56, 55, 56, 55, 53, 48, 55, 48, 48, 55],
   };
   const THEME_HZ = {};
   for (const k in THEME_NOTES) THEME_HZ[k] = THEME_NOTES[k].map(n => (n > 0 ? midiHz(n) : 0));
@@ -589,8 +599,13 @@
   };
 
   audio.setTheme(settings.theme);
-  const THEME_ORDER = ['invaders', 'toccata', 'climber', 'caper'];
-  const THEME_NAMES = { invaders: 'Invaders', toccata: 'Toccata', climber: 'Climber', caper: 'Caper' };
+  const THEME_ORDER = ['invaders', 'toccata', 'climber', 'caper',
+    'gyruss', 'gyrussb', 'pacman', 'polepos', 'mrdo', 'pooyan', 'montezuma', 'boulder', 'vanguard'];
+  const THEME_NAMES = {
+    invaders: 'Invaders', toccata: 'Toccata', climber: 'Climber', caper: 'Caper',
+    gyruss: 'Gyruss', gyrussb: 'Gyruss B', pacman: 'Pac-Man', polepos: 'Pole Pos',
+    mrdo: 'Mr Do', pooyan: 'Pooyan', montezuma: 'Montezuma', boulder: 'Boulder', vanguard: 'Vanguard',
+  };
   function cycleTheme() {
     const i = THEME_ORDER.indexOf(settings.theme);
     settings.theme = THEME_ORDER[(i + 1) % THEME_ORDER.length];
