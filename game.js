@@ -57,6 +57,12 @@
       rules1: 'הרודף (טבעת לבנה) מנסה לתפוס את הבורח לפני שנגמר הזמן.',
       rules2: 'תפיסה = נקודה לרודף · נגמר הזמן = נקודה לבורח · ראשון ל־3 מנצח.',
       rules3: 'השובלים צבעוניים בלבד — מותר לחצות אותם. הסאונד מאיץ כשהמרחק מתקצר!',
+      mClassic1: 'קלאסי — הרודף (טבעת לבנה) רודף אחרי הבורח.',
+      mClassic2: 'תפסו לפני שייגמר הזמן, או שִׂרדו כדי לנקד. ראשון ל־3 מנצח.',
+      mKoth1: 'מלך הגבעה — שלטו באזור הזוהר הנע.',
+      mKoth2: 'הישארו בתוכו 15 שניות מצטברות כדי לזכות בסיבוב.',
+      mInf1: 'הדבקה — 4 שחקנים, אחד מתחיל נגוע; מגע מדביק.',
+      mInf2: 'התרחקו מהנגועים — השחקן הבריא האחרון מנצח.',
       rowGameType: 'סוג משחק',
       modeClassic: 'קלאסי',
       modeKoth: 'מלך הגבעה',
@@ -144,6 +150,12 @@
       rules1: 'The chaser (white ring) tries to catch the runner before time runs out.',
       rules2: 'Catch = chaser point · Timeout = runner point · First to 3 wins.',
       rules3: 'Trails are decorative — you may cross them. The sound speeds up as you close in!',
+      mClassic1: 'Classic — the chaser (white ring) hunts the runner.',
+      mClassic2: 'Tag before the timer runs out, or survive to score. First to 3 wins.',
+      mKoth1: 'King of the Hill — control the moving glowing zone.',
+      mKoth2: 'Stay inside it for 15 seconds total to win the round.',
+      mInf1: 'Infection — 4 players, one starts infected; a touch spreads it.',
+      mInf2: 'Avoid the infected — the last healthy player wins.',
       rowGameType: 'Game type',
       modeClassic: 'Classic',
       modeKoth: 'King of the Hill',
@@ -468,6 +480,17 @@
     const [x, y] = canvasPos(e.clientX, e.clientY);
     uiTapAt(x, y);
   });
+
+  // hover (desktop) — drives the game-type tooltip preview
+  let cursor = null;
+  canvas.addEventListener('mousemove', (e) => { cursor = canvasPos(e.clientX, e.clientY); });
+  canvas.addEventListener('mouseleave', () => { cursor = null; });
+
+  /** The two how-to-play lines for a game-type key. */
+  function modeDescLines(k) {
+    const p = k === 'koth' ? 'mKoth' : k === 'infection' ? 'mInf' : 'mClassic';
+    return [t(p + '1'), t(p + '2')];
+  }
 
   canvas.addEventListener('touchstart', (e) => {
     e.preventDefault();
@@ -889,8 +912,22 @@
     ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 18;
     centerText(t('title'), 70, 38);
     ctx.restore();
-    centerText(t('rules1'), 106, 15);
-    centerText(t('rules2'), 128, 15);
+    // Game-type how-to: the two intro lines describe whichever mode the cursor
+    // hovers (desktop preview) or, with no hover, the currently selected mode
+    // (so it updates as you tap on mobile). Hit-rects mirror the row below.
+    const GT = ['classic', 'koth', 'infection'], gw = 104, gh = 30, ggap = 10;
+    const gtotal = GT.length * gw + (GT.length - 1) * ggap;
+    let gcx = canvas.width / 2 + gtotal / 2 - gw / 2;
+    let hoveredMode = null;
+    for (const k of GT) {
+      const rx = gcx - gw / 2;
+      if (cursor && cursor[0] >= rx && cursor[0] <= rx + gw && cursor[1] >= 188 && cursor[1] <= 188 + gh) hoveredMode = k;
+      gcx -= gw + ggap;
+    }
+    const dm = modeDescLines(hoveredMode || settings.gameMode);
+    const dc = hoveredMode ? '#bfe3ff' : '#ffffff';
+    centerText(dm[0], 106, 15, dc);
+    centerText(dm[1], 128, 15, dc);
     centerText(t('rules3'), 150, 15);
 
     drawChoiceRow(t('rowGameType'), [
