@@ -1016,7 +1016,7 @@
     if (!NET) line = t('onlineUnavailableBrowser');
     else if (connected) line = NET.role === 'host' ? t('hostConnectedStart') : t('guestConnectedWaiting');
     else if ((st === 'hosting' || st === 'waiting') && NET.code) line = t('roomCodeStatus', NET.code, t(NET_STATUS_KEYS[st]));
-    else line = netMsg || t('playFriend');
+    else line = netMsg || t('onlineWifiTip');
     centerText(line, y - 6, 14, connected ? '#88ffbb' : (st === 'error' ? '#ff8888' : '#aaaaaa'));
     if (!NET) return;
     if (connected) {
@@ -1042,7 +1042,6 @@
       drawButton(t('btnHost'), cx, y + 6, w, h, true, hostGame); cx -= w + gap;
       drawButton(t('btnJoin'), cx, y + 6, w, h, false, joinGame);
     }
-    if (!connected && st !== 'error') centerText(t('onlineWifiTip'), y + 44, 10, '#777777');
   }
 
   /** Guest's pre-game screen while the host is still in the menu. */
