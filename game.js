@@ -119,7 +119,8 @@
       connectFirst: 'התחברו תחילה (אירוח או הצטרפות)',
       connectedRoom: (c) => `מחוברים לחדר ${c}`,
       waitHostStart: 'ממתין שהמארח יתחיל את המשחק',
-      moveControls: 'שלטו בעזרת W,A,S,D או מגע',
+      guestGo: 'או לחצו רווח כדי להתחיל',
+      moveControls: 'שלטו בעזרת חצים, W,A,S,D או מגע',
       helpTitle: 'איך משחקים',
       help1: 'הרודף (טבעת לבנה) מנסה לתפוס את הבורח לפני שייגמר הזמן.',
       help2: 'אתם תמיד בתנועה — אפשר רק לכוון, אי אפשר לעצור. הקירות מקפיצים אתכם.',
@@ -202,7 +203,8 @@
       connectFirst: 'Connect first (Host or Join)',
       connectedRoom: (c) => `Connected to room ${c}`,
       waitHostStart: 'Waiting for the host to start',
-      moveControls: 'Move with W,A,S,D or touch',
+      guestGo: 'or press Space to start',
+      moveControls: 'Move with arrows, W,A,S,D, or touch',
       helpTitle: 'How to play',
       help1: 'The chaser (white ring) tries to tag the runner before time runs out.',
       help2: "You're always moving — steer, you can't stop. Walls bounce you back.",
@@ -304,6 +306,7 @@
     if (!d || typeof d !== 'object') return;
     if (NET.role === 'host') {
       if (d.t === 'in' && Array.isArray(d.d)) guestInput = [d.d[0] || 0, d.d[1] || 0];
+      else if (d.t === 'go') advanceState(); // guest pressed Space → start / next round / rematch
     } else { // guest receives authoritative snapshots
       if (d.t === 's' && d.snap) {
         if (settings.gameMode !== d.snap.mode) {
@@ -392,7 +395,12 @@
   }
 
   document.addEventListener('keydown', (e) => {
-    if (e.code === 'Space') { e.preventDefault(); if (showHelp) { dismissHelp(); return; } advanceState(); return; }
+    if (e.code === 'Space') {
+      e.preventDefault();
+      if (showHelp) { dismissHelp(); return; }
+      if (amGuest()) { NET.send({ t: 'go' }); return; } // ask the host to start / rematch
+      advanceState(); return;
+    }
     if (e.code === 'Escape') { if (!amGuest()) game.resetMatch(); return; } // back to menu anytime
     if (e.code === 'KeyM') { audio.muted = !audio.muted; return; }
     if (game.state === State.READY && !isOnline() && (e.code === 'Digit1' || e.code === 'Digit2')) {
@@ -960,8 +968,9 @@
     centerText(t('connectedRoom', NET && NET.code ? NET.code : ''), 220, 18, '#88ffbb');
     const dots = '.'.repeat(1 + (Math.floor(game.time * 2) % 3));
     centerText(t('waitHostStart') + dots, 260, 18);
-    centerText(t('moveControls'), 300, 14, '#888888');
-    drawButton(t('btnDisconnect'), canvas.width / 2, 340, 130, 32, false, leaveOnline);
+    centerText(t('guestGo'), 286, 14, '#88ccff');
+    centerText(t('moveControls'), 312, 14, '#888888');
+    drawButton(t('btnDisconnect'), canvas.width / 2, 348, 130, 32, false, leaveOnline);
   }
 
   function drawJoystick() {
