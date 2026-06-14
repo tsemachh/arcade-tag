@@ -2,70 +2,92 @@
 
 **Play it live: https://tsemachh.github.io/arcade-tag/**
 
-Phase 3 features: **online multiplayer** — pick "אונליין" (online), one
-player hosts and shares a 5-character room code, the other joins by code, and
-the two play real-time tag over WebRTC. Networking is host-authoritative
-(the host runs the simulation and streams ~30 Hz state snapshots; the guest
-sends only its input and renders the snapshots, reconstructing trails
-locally). Transport is PeerJS on its free public broker — no server, no API
-key, no build step. Works for Classic and King of the Hill; falls back
-silently to offline play if the broker can't be reached.
+A minimalist arcade tag game in a single page — no build, no dependencies,
+no server. Chase, survive, and (in radar mode) find your opponent by sound.
+Bilingual (English / עברית, auto-detected), installable as an app, and
+playable online against a friend over WebRTC.
 
-Phase 2 features: three game modes — Classic (קלאסי), King of the Hill
-(מלך הגבעה: hold the moving zone 15s), and Infection (הדבקה: 4 players,
-one starts infected, last healthy player wins); power-ups (⚡ dash,
-❄ freeze opponents, 👻 ghost — invisible, trail stops); and catch-moment
-effects (flash, expanding rings, particle burst).
+## Play
 
-## Phase 1 MVP
+Open the link above, or install it to your home screen (it's a PWA and runs
+offline in single-player). Pick a game type, an opponent, and press **Start**.
 
-Phase 1 MVP per the spec ("Start small"): local 2-player tag on one keyboard,
-solid trails as lethal obstacles, and POKEY-style adaptive audio — a square-wave
-ostinato whose tempo and pitch are driven directly by the Euclidean distance
-between the players. No networking, no shaders, no middleware (those are Phase 2).
+### Controls
 
-## Run
+- **Player 1:** arrow keys, W/A/S/D, or touch (a floating joystick anchors
+  wherever your finger lands). In local two-player, P1 is W/A/S/D and P2 is the
+  arrow keys.
+- **Space** start / next round · **Esc** back to menu · **M** mute · **?** how-to.
 
-Open `index.html` in a browser. No build, no dependencies.
+Actors are **always moving** — you steer, you can't stop, and walls bounce you.
 
-## Controls
+## Game types
 
-The start screen has tappable settings: game mode (vs computer / two
-players), AI difficulty (easy / medium / hard), and game speed (slow /
-normal / fast), plus a start button. Keyboard still works: 1/2 toggle the
-mode, Space starts, M mutes.
+- **Classic** — the chaser (white ring) tags the runner before the timer; a
+  catch is a point for the chaser, a timeout a point for the runner. First to 3.
+- **King of the Hill** — hold the moving zone for 15 accumulated seconds.
+- **Infection** — 4 players, one starts infected; the last healthy player wins.
 
-Player 1: W A S D, or touch — a floating virtual joystick anchors wherever
-your finger lands (phones/tablets supported; the canvas scales to the
-viewport). Player 2: arrow keys. Both players share one hue-cycling color
-whose hues persist along the trail; heads are the live tip of the line and
-the white ring marks the current chaser. Roles alternate each round.
-First to 3 round wins takes the match; after a match you return to the menu.
-The countdown shows an animated "who chases whom" label and role tags over
-each dot; during play a prominent timer pulses red in the last 5 seconds.
+Classic and King of the Hill are also playable **online** (2 players).
 
-## Rules
+## Power-ups
 
-A round ends only two ways: the chaser touches the runner (chaser wins) or
-the 30-second timer runs out (runner wins). Trails are decorative — players
-may cross any trail, including their own. Walls contain players but are
-never lethal.
+⚡ **dash** (speed burst) · ❄ **freeze** (slow everyone else) ·
+👻 **ghost** (invisible, no trail) · ↔ **wide** (triples the chaser's reach,
+Arkanoid-style) · ▽ **shrink** (halves how close a chaser must get to tag you).
+
+## Modes & extras
+
+- **Sound Radar** — hides the heads and scatters decoy "spaghetti" so you hunt
+  your opponent by the adaptive audio (tempo + pitch rise as you close in).
+- **Music themes** — square-wave chiptunes: Invaders, Bach's *Toccata* (the tune
+  Gyruss actually used, public domain), and two originals (Climber, Caper).
+- **Online multiplayer** — host a room, share the **invite link** (one tap to
+  join), and play over WebRTC (PeerJS, no server). Host-authoritative with
+  client-side prediction so the guest feels responsive.
+
+## Online (how it works)
+
+Networking is **host-authoritative**: the host runs the authoritative
+simulation and streams ~30 Hz state snapshots; the guest sends only its input
+and renders the snapshots, reconstructing trails locally and dead-reckoning
+heads between snapshots for smooth motion. Transport is PeerJS on its free
+public broker — no server, no API key. Falls back silently to offline play if
+the broker can't be reached.
+
+## Run / hack locally
+
+Open `index.html` in a browser. No build step. Logic tests:
+
+```
+node test.js     # 146 assertions: core rules, AI, power-ups, networking
+```
 
 ## Files
 
-`game-core.js` — engine-agnostic logic (players, catch/timeout rules, state
-machine, distance→tempo/pitch mapping). Node-testable.
-`ai.js` — AI opponent: steering behaviors (predictive pursuit/evasion) with
-wall repulsion, tangential escape, and difficulty presets. Node-testable.
-`game.js` — browser layer: canvas rendering, menu buttons, keyboard + touch
-input, Web Audio, and the online host/guest game loop.
-`net.js` — Phase 3 networking: PeerJS wrapper with short room codes,
-host/join, and a single reliable data channel. Loads if PeerJS is present;
-the game runs offline without it.
-`test.js` — core + AI + preset + networking tests: `node test.js`
-(137 assertions, incl. host→guest snapshot round-trips).
+- `index.html` — page shell, PWA manifest/SW hookup, social meta.
+- `game-core.js` — engine-agnostic logic: players, catch/timeout rules, modes,
+  power-ups, decoy generation, distance→audio mapping, and the host↔guest
+  snapshot sync. Node-testable.
+- `ai.js` — AI opponent: predictive pursuit/evasion with wall repulsion.
+- `net.js` — PeerJS wrapper: short room codes, host/join, one reliable channel.
+- `game.js` — browser layer: rendering, input (keyboard/touch), Web Audio with
+  selectable themes, menus, i18n, online host/guest loop, effects.
+- `manifest.webmanifest`, `sw.js`, `icon.svg` — installable PWA + offline shell.
+- `test.js` — `node test.js`.
 
 ## Deploy
 
-Static files only — no build step. Copy the folder to any static host
-(GitHub Pages, Netlify, Cloudflare Pages) and serve `index.html`.
+Static files only. Push to any static host (these are served from GitHub Pages).
+CI (`.github/workflows/ci.yml`) runs the tests on every push.
+
+## History
+
+- **Phase 1** — local 2-player tag, lethal-trail-free rules, POKEY-style
+  adaptive audio, AI opponent, touch controls.
+- **Phase 2** — game modes (classic / KOTH / infection), power-ups, catch
+  effects.
+- **Phase 3** — online multiplayer (PeerJS, host-authoritative).
+- **Phase 4** — feel pass (wall bounce, bolder trails, sound radar + decoys),
+  more power-ups (wide, shrink), music themes, English/Hebrew i18n, PWA,
+  invite links, latency smoothing, screen-shake/score juice, and onboarding.
