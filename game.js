@@ -212,6 +212,8 @@
   let guestInput = [0, 0];        // host: latest direction received from the guest
   let seenEventKey = null;        // guest: dedupe one-shot effects across snapshots
   let netMsg = '';                // status line shown in the online menu panel
+  let lastSnapMs = 0;             // guest: time the last snapshot landed (for extrapolation)
+  const EXTRAP_CAP = 0.18;        // max seconds of guest-side dead-reckoning
 
   /** Rebuild the Game when the selected mode differs (fresh 0:0 match). */
   function syncMode() {
@@ -275,6 +277,7 @@
           effects = []; seenEvent = null; seenEventKey = null;
         }
         game.applySnapshot(d.snap);
+        lastSnapMs = performance.now(); // mark authoritative time for extrapolation
       }
     }
   }
@@ -579,7 +582,30 @@
     }
   }
 
-  function drawPlayer(p, ring) {
+  /** Latency smoothing (guest only): the authoritative snapshots arrive at
+   *  ~30 Hz, so between them we dead-reckon each head forward by its velocity to
+   *  render smoothly at 60 fps. The guest's OWN player (index 1) is predicted
+   *  from live local input instead of the lagged snapshot heading, cutting its
+   *  perceived input delay. Purely visual — authority/trails/catch are untouched. */
+  function displayPos(p, i) {
+    if (!amGuest() || game.state !== State.PLAYING) return [p.x, p.y];
+    let dt = (performance.now() - lastSnapMs) / 1000;
+    if (!(dt > 0)) return [p.x, p.y];
+    dt = Math.min(dt, EXTRAP_CAP);
+    let dx = p.dirX, dy = p.dirY;
+    if (i === 1) { // my own player — predict from the input I'm holding right now
+      const [ix, iy] = localInput();
+      if (ix || iy) { const m = Math.hypot(ix, iy) || 1; dx = ix / m; dy = iy / m; }
+    }
+    const sp = game.cfg.speed * p.speedFactor(game.cfg);
+    const r = game.cfg.playerRadius;
+    const x = Math.max(r, Math.min(game.cfg.width - r, p.x + dx * sp * dt));
+    const y = Math.max(r, Math.min(game.cfg.height - r, p.y + dy * sp * dt));
+    return [x, y];
+  }
+
+  function drawPlayer(p, ring, idx) {
+    const [hx, hy] = displayPos(p, idx);
     const color = colorAt(game.time);
     ctx.lineWidth = game.cfg.trailWidth;
     ctx.lineJoin = 'round';
@@ -602,7 +628,7 @@
       ctx.strokeStyle = color;
       ctx.beginPath();
       ctx.moveTo(t[t.length - 1].x, t[t.length - 1].y);
-      ctx.lineTo(p.x, p.y);
+      ctx.lineTo(hx, hy); // smoothed/predicted head position
       ctx.stroke();
     }
     // ↔ wide power-up: the head (and chaser ring) swell to ~3× to show the reach
@@ -612,7 +638,7 @@
     ctx.shadowBlur = 12 * wf;
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, (game.cfg.trailWidth / 2 + 0.5) * wf, 0, Math.PI * 2);
+    ctx.arc(hx, hy, (game.cfg.trailWidth / 2 + 0.5) * wf, 0, Math.PI * 2);
     ctx.fill();
     if (ring) {
       const rc = RING_COLORS[ring] || '#ffffff';
@@ -620,7 +646,7 @@
       ctx.strokeStyle = rc;
       ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, (game.cfg.trailWidth / 2 + 5) * wf, 0, Math.PI * 2);
+      ctx.arc(hx, hy, (game.cfg.trailWidth / 2 + 5) * wf, 0, Math.PI * 2);
       ctx.stroke();
     }
     ctx.restore();
@@ -933,7 +959,7 @@
       drawDecoys(); // camouflage behind the real trails (radar mode only)
       drawZone();
       drawPowerups();
-      game.players.forEach((p, i) => drawPlayer(p, ringFor(i)));
+      game.players.forEach((p, i) => drawPlayer(p, ringFor(i), i));
     }
 
     if (game.state !== State.READY) drawHud(); // menu keeps its corners clear for the language toggle
