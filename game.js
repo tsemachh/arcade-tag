@@ -110,6 +110,8 @@
       netConnecting: 'מתחבר…',
       netConnected: 'מחובר ✓',
       netClosed: 'החיבור נותק',
+      reconnecting: 'מתחבר מחדש…',
+      reconnectFailed: 'החיבור אבד',
       errPrefix: (e) => `שגיאה: ${e}`,
       errFailed: 'נכשל',
       onlineUnavailable: 'אונליין לא זמין',
@@ -194,6 +196,8 @@
       netConnecting: 'Connecting…',
       netConnected: 'Connected ✓',
       netClosed: 'Disconnected',
+      reconnecting: 'Reconnecting…',
+      reconnectFailed: 'Connection lost',
       errPrefix: (e) => `Error: ${e}`,
       errFailed: 'failed',
       onlineUnavailable: 'Online unavailable',
@@ -289,17 +293,42 @@
     netMsg = s === 'error' ? t('errPrefix', err || t('errFailed')) : (NET_STATUS_KEYS[s] ? t(NET_STATUS_KEYS[s]) : '');
   }
 
+  let reconnectTimer = null, reconnectTries = 0;
+  function clearReconnect() {
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    reconnectTries = 0;
+  }
+  /** Guest: keep trying to reopen the channel to the same host (bounded). */
+  function scheduleReconnect() {
+    if (reconnectTries >= 4) { netMsg = t('reconnectFailed'); return; }
+    reconnectTries++;
+    netMsg = t('reconnecting') + ' (' + reconnectTries + '/4)';
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      if (!NET || NET.isConnected()) return; // recovered (or gone) — onNetConnected clears us
+      NET.reconnect();
+      scheduleReconnect(); // queue the next attempt; cancelled once connected
+    }, 1600);
+  }
+
   function onNetConnected() {
+    clearReconnect();
     netMsg = t('netConnected');
     // Guest mirrors the host's mode/state via snapshots; start from a clean game.
     if (NET.role === 'guest') { effects = []; seenEvent = null; seenEventKey = null; }
   }
 
-  function onNetClosed() {
-    netMsg = t('netClosed');
+  function onNetClosed(intentional) {
     guestInput = [0, 0];
     // If a networked match was in progress, fall back to the menu.
     if (game.state !== State.READY) { game.resetMatch(); }
+    if (!intentional && NET.role === 'guest' && NET.code) {
+      scheduleReconnect(); // transient drop — try to come back automatically
+    } else {
+      netMsg = t('netClosed');
+      clearReconnect();
+    }
   }
 
   function onNetData(d) {

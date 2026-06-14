@@ -51,6 +51,7 @@
     host() {
       if (!this._available()) { this._set('error', 'PeerJS not loaded'); return null; }
       this.close();
+      this._intentional = false;
       this.role = 'host';
       this.code = makeCode(5);
       this._set('hosting');
@@ -75,6 +76,7 @@
       const code = String(rawCode || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
       if (!code) { this._set('error', 'empty code'); return; }
       this.close();
+      this._intentional = false;
       this.role = 'guest';
       this.code = code;
       this._set('connecting');
@@ -97,11 +99,29 @@
       });
       conn.on('data', (d) => { if (this.onData) this.onData(d); });
       conn.on('close', () => {
-        this._set('closed');
         this.conn = null;
-        if (this.onClosed) this.onClosed();
+        const intentional = !!this._intentional;
+        if (intentional) this._set('closed');
+        else if (this.role === 'host') this._set('waiting'); // keep the room open for a reconnect
+        else this._set('closed');
+        if (this.onClosed) this.onClosed(intentional);
       });
       conn.on('error', (e) => this._set('error', String(e && e.message || e)));
+    },
+
+    /** Guest: re-open a data channel to the same host using the existing peer
+     *  (no full teardown). Returns true if a reconnect attempt was started. */
+    reconnect() {
+      if (this._intentional || this.role !== 'guest' || !this.code) return false;
+      if (!this.peer || this.peer.destroyed) return false;
+      if (this.conn && this.conn.open) return false;
+      try {
+        const conn = this.peer.connect(PREFIX + this.code, { reliable: true });
+        this.conn = conn;
+        this._wireConn(conn);
+        this._set('connecting');
+        return true;
+      } catch (e) { this._set('error', String(e)); return false; }
     },
 
     _handlePeerError(e) {
@@ -121,6 +141,7 @@
     isConnected() { return !!(this.conn && this.conn.open); },
 
     close() {
+      this._intentional = true;
       try { if (this.conn) this.conn.close(); } catch (e) {}
       try { if (this.peer) this.peer.destroy(); } catch (e) {}
       this.conn = null;
