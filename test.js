@@ -366,6 +366,36 @@ console.log('networking: wide effect rides along in the snapshot');
     'guest mirrors the wide effect timer');
 }
 
+console.log('power-ups: shrink halves the chaser reach against the runner');
+{
+  // baseline: a runner 9px away is caught (catchRadius 14). Both head the same
+  // way so the 9px gap is preserved rather than collapsing on contact.
+  const a = playingGame();
+  const ci = a.chaserIndex;
+  a.players[ci].x = 100; a.players[ci].y = 100; a.players[ci].setDirection(0, 1);
+  a.players[1 - ci].x = 109; a.players[1 - ci].y = 100; a.players[1 - ci].setDirection(0, 1);
+  a.step(1 / 60);
+  assert(a.state === State.ROUND_OVER && a.lastRoundResult.reason === 'catch',
+    'runner at 9px is normally tagged');
+  // with the runner shrunk, 9px is outside the halved reach (~7px)
+  const b = playingGame();
+  const cj = b.chaserIndex;
+  b.players[cj].x = 100; b.players[cj].y = 100; b.players[cj].setDirection(0, 1);
+  b.players[1 - cj].x = 109; b.players[1 - cj].y = 100; b.players[1 - cj].setDirection(0, 1);
+  b.players[1 - cj].fx.shrink = 1.0;
+  b.step(1 / 60);
+  assert(b.state === State.PLAYING, 'a shrunk runner at 9px slips the tag');
+}
+
+console.log('networking: shrink effect rides along in the snapshot');
+{
+  const host = playingGame();
+  host.players[0].fx.shrink = 3.0;
+  const guest = new Game();
+  guest.applySnapshot(host.snapshot());
+  assert(approx(guest.players[0].fx.shrink, 3.0, 0.02), 'guest mirrors the shrink effect timer');
+}
+
 console.log('AI: ghosting foe kills prediction lead (and stays deterministic)');
 {
   const g = playingGame();

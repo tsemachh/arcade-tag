@@ -74,7 +74,7 @@
       speedNormal: 'רגיל',
       speedFast: 'מהיר',
       startGame: 'התחל משחק',
-      powerups: 'בונוסים: ⚡ האצה · ❄ הקפאה · 👻 היעלמות · ↔ תופס רחב',
+      powerups: 'בונוסים: ⚡ האצה · ❄ הקפאה · 👻 היעלמות · ↔ תופס רחב · ▽ התכווצות',
       radarLabel: 'מכ״ם קולי',
       radarHint: 'מכ״ם קולי פעיל — אתרו את היריב לפי הצליל',
       hintOnline: 'אונליין — חצים / W,A,S,D / מגע · המארח לוחץ רווח להתחלה · M להשתקה',
@@ -158,7 +158,7 @@
       speedNormal: 'Normal',
       speedFast: 'Fast',
       startGame: 'Start game',
-      powerups: 'Power-ups: ⚡ dash · ❄ freeze · 👻 ghost · ↔ wide catch',
+      powerups: 'Power-ups: ⚡ dash · ❄ freeze · 👻 ghost · ↔ wide · ▽ shrink',
       radarLabel: 'Sound Radar',
       radarHint: 'Sound Radar on — find your opponent by ear',
       hintOnline: 'Online — arrows / W,A,S,D / touch · host presses Space to start · M to mute',
@@ -547,18 +547,41 @@
   window.__cycleTheme = cycleTheme; // verification hook
 
   // ---------- event effects (catch / infect / pickup) ----------
-  let effects = [];   // {kind: 'boom'|'pop', x, y, t} — t is a local clock (s)
+  let effects = [];   // {kind: 'boom'|'pop'|'score', x, y, t} — t is a local clock (s)
   let seenEvent = null;
+  let shake = 0;      // screen-shake timer (s), triggered by impactful events
 
   function spawnEffect(ev) {
     if (!ev) return;
-    effects.push({ kind: ev.type === 'pickup' ? 'pop' : 'boom', x: ev.x, y: ev.y, t: 0 });
+    const big = ev.type !== 'pickup';
+    effects.push({ kind: big ? 'boom' : 'pop', x: ev.x, y: ev.y, t: 0 });
+    if (big) shake = Math.max(shake, 0.3); // catch / infect / zone → shake
+  }
+
+  /** Float a "+1" above whoever just won the round. */
+  function spawnScorePop() {
+    const r = game.lastRoundResult;
+    if (!r) return;
+    const p = game.players[r.winnerIndex];
+    if (p) effects.push({ kind: 'score', x: p.x, y: p.y - 16, t: 0, text: '+1' });
   }
 
   function drawEffects(dt) {
     for (const e of effects) e.t += dt;
-    effects = effects.filter(e => e.t < (e.kind === 'boom' ? 1.0 : 0.45));
+    effects = effects.filter(e => e.t < (e.kind === 'boom' ? 1.0 : e.kind === 'score' ? 0.9 : 0.45));
     for (const e of effects) {
+      if (e.kind === 'score') {
+        const rt = e.t / 0.9;
+        ctx.save();
+        ctx.globalAlpha = 1 - rt;
+        ctx.shadowColor = colorAt(game.time); ctx.shadowBlur = 12;
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 26px "Helvetica Neue", Arial, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(e.text, e.x, e.y - rt * 34); // float upward as it fades
+        ctx.restore();
+        continue;
+      }
       if (e.kind === 'boom') {
         // brief white screen flash
         if (e.t < 0.25) {
@@ -689,8 +712,8 @@
       ctx.lineTo(hx, hy); // smoothed/predicted head position
       ctx.stroke();
     }
-    // ↔ wide power-up: the head (and chaser ring) swell to ~3× to show the reach
-    const wf = (p.fx && p.fx.wide > 0) ? game.cfg.wideMult : 1;
+    // power-up size: ↔ wide swells the head/ring ~3×, ▽ shrink halves it
+    const wf = (p.fx ? (p.fx.wide > 0 ? game.cfg.wideMult : 1) * (p.fx.shrink > 0 ? game.cfg.shrinkMult : 1) : 1);
     ctx.save();
     ctx.shadowColor = color;
     ctx.shadowBlur = 12 * wf;
@@ -721,6 +744,7 @@
     freeze: { color: '#44ddff', glyph: '❄' },
     ghost:  { color: '#bb66ff', glyph: '👻' },
     wide:   { color: '#ff77aa', glyph: '↔' },
+    shrink: { color: '#55ddbb', glyph: '▽' },
   };
 
   function drawPowerups() {
@@ -1146,6 +1170,15 @@
     }
 
     drawEffects(dt);
+
+    // screen shake — nudge the whole canvas via a CSS transform (decays out)
+    if (shake > 0) {
+      shake = Math.max(0, shake - (frameDt || 0));
+      const a = shake * 16;
+      canvas.style.transform = `translate(${(Math.random() - 0.5) * a}px, ${(Math.random() - 0.5) * a}px)`;
+    } else if (canvas.style.transform) {
+      canvas.style.transform = '';
+    }
   }
   window.__draw = draw; // verification/debug hook
   window.__buttons = buttons; // refreshed below each frame
@@ -1234,7 +1267,7 @@
       if (netSendClock >= SNAP_INTERVAL) { netSendClock = 0; NET.send({ t: 'in', d: [gx, gy] }); }
       handleGuestEvent();
       if ((game.state === State.ROUND_OVER || game.state === State.MATCH_OVER) && prevState === State.PLAYING) {
-        audio.catchJingle();
+        audio.catchJingle(); spawnScorePop();
       }
       prevState = game.state;
       audio.schedule();
@@ -1262,7 +1295,7 @@
       spawnEffect(game.lastEvent);
     }
     if ((game.state === State.ROUND_OVER || game.state === State.MATCH_OVER) && prevState === State.PLAYING) {
-      audio.catchJingle();
+      audio.catchJingle(); spawnScorePop();
     }
     prevState = game.state;
     // Host: broadcast authoritative state to the guest (throttled), in every
