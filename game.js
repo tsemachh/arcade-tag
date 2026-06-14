@@ -60,6 +60,8 @@
       hostConnectedStart: 'שחקן 2 מחובר ✓ — לחצו "התחל משחק"',
       guestConnectedWaiting: 'מחובר ✓ — ממתין למארח',
       playFriend: 'שחקו מול חבר דרך האינטרנט',
+      btnCopyLink: '🔗 העתק קישור הזמנה',
+      linkCopied: 'הקישור הועתק ✓ — שלחו אותו לחבר',
       btnHost: 'אירוח',
       btnJoin: 'הצטרפות',
       btnDisconnect: 'התנתק',
@@ -135,6 +137,8 @@
       hostConnectedStart: 'Player 2 connected ✓ — press "Start game"',
       guestConnectedWaiting: 'Connected ✓ — waiting for host',
       playFriend: 'Play a friend over the internet',
+      btnCopyLink: '🔗 Copy invite link',
+      linkCopied: 'Invite link copied ✓ — send it to a friend',
       btnHost: 'Host',
       btnJoin: 'Join',
       btnDisconnect: 'Disconnect',
@@ -293,6 +297,21 @@
     if (code) NET.join(code);
   }
   function leaveOnline() { if (NET) NET.close(); netMsg = ''; }
+
+  /** Shareable invite URL that pre-fills the room code (?join=CODE). */
+  function inviteLink() {
+    const code = NET && NET.code ? NET.code : '';
+    return location.origin + location.pathname + '?join=' + code;
+  }
+  function copyInvite() {
+    const url = inviteLink();
+    const ok = () => { netMsg = t('linkCopied'); };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(ok, () => { netMsg = url; });
+      } else { window.prompt(t('btnCopyLink'), url); } // fallback: show it to copy by hand
+    } catch (e) { window.prompt(t('btnCopyLink'), url); }
+  }
 
   // ---------- input: keyboard ----------
   const keys = new Set();
@@ -803,8 +822,21 @@
     centerText(line, y - 6, 14, connected ? '#88ffbb' : (st === 'error' ? '#ff8888' : '#aaaaaa'));
     if (!NET) return;
     if (connected) {
-      drawButton(t('btnDisconnect'), canvas.width / 2, y + 6, 130, 30, false, leaveOnline);
-    } else if (st === 'hosting' || st === 'waiting' || st === 'connecting') {
+      if (NET.role === 'host') {
+        const w = 150, h = 30, gap = 12, total = 2 * w + gap;
+        let cx = canvas.width / 2 + total / 2 - w / 2; // rightmost first (RTL)
+        drawButton(t('btnCopyLink'), cx, y + 6, w, h, true, copyInvite); cx -= w + gap;
+        drawButton(t('btnDisconnect'), cx, y + 6, w, h, false, leaveOnline);
+      } else {
+        drawButton(t('btnDisconnect'), canvas.width / 2, y + 6, 130, 30, false, leaveOnline);
+      }
+    } else if (st === 'hosting' || st === 'waiting') {
+      // host is waiting for a guest — let them copy the invite link to share
+      const w = 150, h = 30, gap = 12, total = 2 * w + gap;
+      let cx = canvas.width / 2 + total / 2 - w / 2; // rightmost first (RTL)
+      drawButton(t('btnCopyLink'), cx, y + 6, w, h, true, copyInvite); cx -= w + gap;
+      drawButton(t('btnCancel'), cx, y + 6, w, h, false, leaveOnline);
+    } else if (st === 'connecting') {
       drawButton(t('btnCancel'), canvas.width / 2, y + 6, 130, 30, false, leaveOnline);
     } else {
       const w = 120, h = 30, gap = 12, total = 2 * w + gap;
@@ -1068,6 +1100,15 @@
     const key = ev.type + '@' + (ev.time != null ? ev.time.toFixed(3) : '');
     if (key !== seenEventKey) { seenEventKey = key; spawnEffect(ev); }
   }
+
+  // Deep-link: a shared ?join=CODE link auto-joins that room on load.
+  (function initInviteLink() {
+    if (!NET) return;
+    let code = '';
+    try { code = new URLSearchParams(location.search).get('join') || ''; } catch (e) {}
+    code = code.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (code) { settings.opponent = 'online'; NET.join(code); }
+  })();
 
   // ---------- main loop ----------
   let last = performance.now();
