@@ -525,93 +525,105 @@
   canvas.addEventListener('touchend', endTouch);
   canvas.addEventListener('touchcancel', endTouch);
 
-  // ---------- adaptive audio (POKEY-style square ostinato) ----------
-  // Selectable chiptune themes. Each is a MIDI-note loop (0 = rest); tempo and
-  // pitch are still driven by how close the players are — the sonar.
+  // ---------- adaptive audio: multi-voice chiptune ----------
+  // Each theme plays up to three oscillator voices per step — square melody +
+  // triangle bass + noise drum (MIDI note numbers; 0 = silent). The step length
+  // is driven by how close the players are: the "sonar" accelerates the tune.
   const midiHz = (n) => 440 * Math.pow(2, (n - 69) / 12);
-  const THEME_NOTES = {
-    invaders: [40, 38, 36, 35],                                  // Space Invaders homage (descending)
-    // J.S. Bach — Toccata & Fugue in D minor, BWV 565 (public domain).
-    // The tune the Gyruss arcade machine actually used.
-    toccata:  [57, 55, 57, 0, 55, 53, 52, 50, 49, 50, 0, 0],
-    climber:  [48, 52, 55, 60, 59, 55, 52, 55],                  // original — bouncy "climb the girders" spirit
-    caper:    [45, 49, 52, 49, 45, 52, 50, 47],                  // original — jaunty "beat-cop caper" chase
-    // Melodies extracted from classic arcade MIDIs (top voice, transposed to the chiptune range).
-    gyruss:    [69, 67, 69, 67, 65, 64, 62, 61, 62, 49, 37, 40, 43, 46, 49, 52, 50, 40, 42, 45, 50, 57, 52, 57, 53, 57, 50, 57, 52, 57, 53, 57, 55, 57, 52, 57, 53, 57, 55, 57],
-    gyrussb:   [57, 57, 57, 57, 53, 52, 50, 49, 50, 50, 49, 52, 57, 58, 61, 64, 54, 52, 50, 38, 45, 38, 45, 38, 45, 38, 45, 38, 69, 68, 67, 66, 65, 64, 63, 62, 61, 60, 59, 58],
-    pacman:    [52, 51, 49, 47, 51, 49, 52, 51, 52, 54, 51, 49, 51, 52, 49, 51, 52, 54, 51, 52, 54, 56, 58, 59, 58, 59, 59],
-    polepos:   [54, 54, 54, 54, 56, 52, 49, 47, 49, 52, 54, 54, 56, 52, 49, 47, 49, 52, 54, 57, 59, 61, 61],
-    mrdo:      [55, 60, 59, 57, 55, 55, 55, 55, 53, 57, 55, 53, 52, 50, 52, 53, 55, 57, 60, 59, 59, 57, 59, 55, 55],
-    pooyan:    [55, 57, 59, 60, 55, 52, 48, 57, 59, 57, 55, 53, 52, 50, 48, 48],
-    montezuma: [47, 47, 47, 52, 56, 56],
-    boulder:   [45, 33, 49, 52, 57, 47, 50, 52, 59, 53, 55, 57, 60, 55, 66, 56, 64, 45, 57, 40, 47, 43, 59, 47, 43, 45, 57, 40, 47, 53, 69, 57, 53, 43, 55, 38, 45, 51, 67, 55],
-    vanguard:  [51, 58, 60, 58, 57, 58, 60, 58, 57, 58, 56, 55, 56, 55, 53, 48, 55, 48, 48, 55],
+  const dn = (a) => a.map(n => (n > 0 ? n - 12 : 0)); // octave-down bass for the originals
+  const z = (a) => a.map(() => 0);
+  const _inv = [40, 38, 36, 35];
+  const _toc = [57, 55, 57, 0, 55, 53, 52, 50, 49, 50, 0, 0]; // Bach BWV 565 (Gyruss / public domain)
+  const _cli = [48, 52, 55, 60, 59, 55, 52, 55];
+  const _cap = [45, 49, 52, 49, 45, 52, 50, 47];
+  const THEMES = {
+    invaders: { mel: _inv, bass: dn(_inv), drum: z(_inv) },
+    toccata:  { mel: _toc, bass: dn(_toc), drum: z(_toc) },
+    climber:  { mel: _cli, bass: dn(_cli), drum: z(_cli) },
+    caper:    { mel: _cap, bass: dn(_cap), drum: z(_cap) },
+    // melody + bass + drums extracted from the classic arcade MIDIs
+    gyruss: { mel: [69,67,69,67,65,64,62,61,62,49,49,49,49,49,49,52,50,50,50,45,50,57,52,57,53,57,50,57,52,57,53,57,55,57,52,57,53,57,55,57,57,57,53,57,55,57,57,57], bass: [45,43,45,43,41,40,38,37,38,38,37,40,40,40,40,40,38,38,38,45,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38], drum: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,1,0,1,1,1,0,1,0,1,0,1,0,0,0,1,0,1,0,1,1,1,0,1,0,1,0] },
+    gyrussb: { mel: [57,57,57,57,53,52,50,49,50,50,49,52,57,58,61,64,54,52,50,38,45,38,45,38,45,38,45,38,69,68,67,66,65,64,63,62,61,60,59,58,57,56,62,64,65,62,64,65], bass: [45,43,45,45,41,40,38,37,38,38,37,40,45,46,49,40,42,40,38,38,45,38,45,38,45,38,45,38,45,45,38,38,45,45,38,38,45,45,38,38,45,45,38,45,38,45,38,45], drum: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] },
+    pacman: { mel: [52,51,49,47,51,49,52,51,52,54,51,49,51,52,49,51,52,54,51,52,54,56,58,59,58,59,59], bass: [40,39,49,47,39,49,40,47,47,42,39,49,49,40,46,47,49,39,47,49,39,40,49,47,49,47,47], drum: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] },
+    polepos: { mel: [54,54,54,54,56,52,49,47,49,52,54,54,56,52,49,47,49,52,54,57,59,61,61], bass: [42,37,37,37,35,35,35,37,37,37,42,42,37,37,37,37,37,37,35,35,35,37,49], drum: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] },
+    mrdo: { mel: [55,60,59,57,55,55,55,55,53,57,55,53,52,50,52,53,55,57,60,59,59,57,59,55,55], bass: [43,48,47,45,43,43,43,43,41,45,43,41,40,50,40,41,43,45,48,47,47,45,47,43,43], drum: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] },
+    pooyan: { mel: [55,57,59,60,55,52,48,57,59,57,55,53,52,50,48,48], bass: [43,45,47,48,43,40,48,45,47,45,43,41,40,50,48,48], drum: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] },
+    montezuma: { mel: [47,47,47,52,56,56], bass: [35,35,35,40,44,44], drum: [0,0,0,0,0,0] },
+    boulder: { mel: [45,45,49,52,57,47,50,52,59,53,55,57,60,55,66,56,64,45,57,40,47,43,59,47,43,45,57,40,47,53,69,57,53,43,55,38,45,51,67,55,51,40,56,42,57,50,50,62], bass: [33,33,33,45,48,31,42,43,50,29,29,41,29,43,50,44,48,33,33,33,33,31,31,31,31,33,33,33,33,41,41,41,41,31,31,31,31,39,39,39,39,28,40,28,40,38,38,33], drum: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] },
+    vanguard: { mel: [51,58,60,58,57,58,60,58,57,58,56,55,56,55,53,48,55,48,48,55,51,58,60,58,57,58,60,58,57,58,56,55,56,55,53,48,55,48,48,55,51,58,60,58,57,58,60,58], bass: [39,46,48,46,45,46,48,46,45,46,44,43,44,43,41,48,43,48,48,43,39,46,48,46,45,46,48,46,45,46,44,43,44,43,41,48,43,48,48,43,39,46,48,46,45,46,48,46], drum: [1,1,1,0,0,1,1,0,1,1,0,0,1,0,0,1,1,1,1,1,1,1,1,0,0,1,1,0,1,1,0,0,1,0,0,1,1,1,1,1,1,1,1,0,0,1,1,0] },
   };
-  const THEME_HZ = {};
-  for (const k in THEME_NOTES) THEME_HZ[k] = THEME_NOTES[k].map(n => (n > 0 ? midiHz(n) : 0));
 
   const audio = {
-    ctx: null, muted: false, nextNoteTime: 0, noteIndex: 0,
-    notes: THEME_HZ.invaders,
-    setTheme(name) { this.notes = THEME_HZ[name] || THEME_HZ.invaders; this.noteIndex = 0; },
+    ctx: null, muted: false, master: null, noiseBuf: null,
+    nextStepTime: 0, stepIndex: 0, theme: THEMES.invaders, _pv: [],
+    setTheme(name) { this.theme = THEMES[name] || THEMES.invaders; this.stepIndex = 0; },
     ensureStarted() {
       if (this.ctx) return;
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return;
       this.ctx = new AC();
-      this.nextNoteTime = this.ctx.currentTime + 0.1;
+      this.master = this.ctx.createDynamicsCompressor(); // keep the mix from clipping
+      this.master.connect(this.ctx.destination);
+      const sr = this.ctx.sampleRate, b = this.ctx.createBuffer(1, Math.floor(sr * 0.2), sr), d = b.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      this.noiseBuf = b;
+      this.nextStepTime = this.ctx.currentTime + 0.1;
     },
-    blip(freq, when) {
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.type = 'square';
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.12, when);
-      gain.gain.exponentialRampToValueAtTime(0.001, when + 0.09);
-      osc.connect(gain).connect(this.ctx.destination);
-      osc.start(when); osc.stop(when + 0.1);
+    tone(midi, when, type, peak, dur) {
+      if (!midi) return null;
+      const osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
+      osc.type = type; osc.frequency.value = midiHz(midi);
+      gain.gain.setValueAtTime(0.0002, when);
+      gain.gain.exponentialRampToValueAtTime(peak, when + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.0008, when + dur);
+      osc.connect(gain).connect(this.master);
+      osc.start(when); osc.stop(when + dur + 0.03);
+      return osc;
+    },
+    noiseHit(when) {
+      const src = this.ctx.createBufferSource(); src.buffer = this.noiseBuf;
+      const gain = this.ctx.createGain(), hp = this.ctx.createBiquadFilter();
+      hp.type = 'highpass'; hp.frequency.value = 1400;
+      gain.gain.setValueAtTime(0.16, when);
+      gain.gain.exponentialRampToValueAtTime(0.001, when + 0.07);
+      src.connect(hp).connect(gain).connect(this.master);
+      src.start(when); src.stop(when + 0.09);
+    },
+    _step(th, i, when, step, collect) {
+      const m = this.tone(th.mel[i], when, 'square', 0.085, step * 0.9);
+      const b = this.tone(th.bass[i], when, 'triangle', 0.17, step * 0.95);
+      if (th.drum[i]) this.noiseHit(when);
+      if (collect) { if (m) this._pv.push(m); if (b) this._pv.push(b); }
     },
     schedule() {
-      if (!this.ctx || this.muted || game.state !== State.PLAYING) return;
-      const { noteIntervalMs, pitchMult } = game.audioParams();
-      const lookahead = this.ctx.currentTime + 0.12;
-      while (this.nextNoteTime < lookahead) {
-        if (this.nextNoteTime < this.ctx.currentTime) this.nextNoteTime = this.ctx.currentTime;
-        const f = this.notes[this.noteIndex % this.notes.length];
-        if (f > 0) this.blip(f * pitchMult, this.nextNoteTime); // 0 = rest
-        this.noteIndex += 1;
-        this.nextNoteTime += noteIntervalMs / 1000;
+      if (!this.ctx || this.muted || game.state !== State.PLAYING || !this.theme) return;
+      const { noteIntervalMs } = game.audioParams();
+      const step = (noteIntervalMs / 1000) * 1.7; // distance-driven tempo (the sonar)
+      const look = this.ctx.currentTime + 0.13;
+      const th = this.theme, L = th.mel.length;
+      while (this.nextStepTime < look) {
+        if (this.nextStepTime < this.ctx.currentTime) this.nextStepTime = this.ctx.currentTime;
+        this._step(th, this.stepIndex % L, this.nextStepTime, step, false);
+        this.stepIndex += 1;
+        this.nextStepTime += step;
       }
     },
-    /** Audition the current theme (~3.5s, looping). Cancels any in-flight
-     *  preview so rapidly switching tunes doesn't stack them up. */
+    /** Audition the current theme (~3.6s, looping). Cancels any in-flight
+     *  preview so rapidly switching tunes doesn't stack up. */
     preview() {
       this.ensureStarted();
       if (!this.ctx || this.muted) return;
-      if (!this._previewOscs) this._previewOscs = [];
       const now = this.ctx.currentTime;
-      for (const o of this._previewOscs) { try { o.stop(now); } catch (e) {} }
-      this._previewOscs = [];
-      const step = 0.135, n = Math.round(3.5 / step);
-      let t = now + 0.05;
-      for (let k = 0; k < n; k++) {
-        const f = this.notes[k % this.notes.length];
-        if (f > 0) {
-          const osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
-          osc.type = 'square'; osc.frequency.value = f;
-          gain.gain.setValueAtTime(0.12, t);
-          gain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
-          osc.connect(gain).connect(this.ctx.destination);
-          osc.start(t); osc.stop(t + 0.1);
-          this._previewOscs.push(osc);
-        }
-        t += step;
-      }
+      for (const o of this._pv) { try { o.stop(now); } catch (e) {} }
+      this._pv = [];
+      const step = 0.2, n = Math.round(3.6 / step), th = this.theme, L = th.mel.length;
+      let when = now + 0.05;
+      for (let k = 0; k < n; k++) { this._step(th, k % L, when, step, true); when += step; }
     },
     catchJingle() {
       if (!this.ctx || this.muted) return;
       const t = this.ctx.currentTime;
-      [523.25, 659.25, 783.99].forEach((f, i) => this.blip(f, t + i * 0.09));
+      [72, 76, 79].forEach((m, i) => this.tone(m, t + i * 0.09, 'square', 0.12, 0.12));
     },
   };
 
