@@ -4,7 +4,7 @@
  * connection; single-player works fully offline. */
 const CACHE = 'arcade-tag-v1';
 const ASSETS = [
-  './', './index.html', './game.js', './game-core.js', './ai.js', './net.js',
+  './', './index.html', './game.js', './game-core.js', './ai.js', './net.js', './songs.js',
   './manifest.webmanifest', './icon.svg',
 ];
 

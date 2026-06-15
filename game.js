@@ -525,100 +525,109 @@
   canvas.addEventListener('touchend', endTouch);
   canvas.addEventListener('touchcancel', endTouch);
 
-  // ---------- adaptive audio: multi-voice chiptune ----------
-  // Each theme plays up to three oscillator voices per step — square melody +
-  // triangle bass + noise drum (MIDI note numbers; 0 = silent). The step length
-  // is driven by how close the players are: the "sonar" accelerates the tune.
+  // ---------- adaptive audio: chiptune MIDI sequencer ----------
+  // Each theme is a looping song of notes [time, dur, midi, voice] (voice
+  // 0 = square lead, 1 = triangle bass, 2 = noise drum). Real timing from the
+  // source MIDI; playback tempo scales with how close the players are — the sonar.
   const midiHz = (n) => 440 * Math.pow(2, (n - 69) / 12);
-  const dn = (a) => a.map(n => (n > 0 ? n - 12 : 0)); // octave-down bass for the originals
-  const z = (a) => a.map(() => 0);
+  const SONGS = window.GameSongs || {};
+  // Turn a plain melody (MIDI notes, 0 = rest) into a song: lead + octave bass.
+  function arpSong(mel, step) {
+    const nn = [];
+    for (let i = 0; i < mel.length; i++) {
+      const pch = mel[i]; if (!pch) continue;
+      const tt = +(i * step).toFixed(3);
+      nn.push([tt, step * 0.9, pch, pch < 48 ? 1 : 0]);
+      nn.push([tt, step * 0.95, pch - 12, 1]);
+    }
+    return { loop: +(mel.length * step).toFixed(3), n: nn };
+  }
   const _inv = [40, 38, 36, 35];
-  const _toc = [57, 55, 57, 0, 55, 53, 52, 50, 49, 50, 0, 0]; // Bach BWV 565 (Gyruss / public domain)
+  const _toc = [57, 55, 57, 0, 55, 53, 52, 50, 49, 50, 0, 0]; // Bach BWV 565 (public domain)
   const _cli = [48, 52, 55, 60, 59, 55, 52, 55];
   const _cap = [45, 49, 52, 49, 45, 52, 50, 47];
   const THEMES = {
-    invaders: { mel: _inv, bass: dn(_inv), drum: z(_inv) },
-    toccata:  { mel: _toc, bass: dn(_toc), drum: z(_toc) },
-    climber:  { mel: _cli, bass: dn(_cli), drum: z(_cli) },
-    caper:    { mel: _cap, bass: dn(_cap), drum: z(_cap) },
-    // melody + bass + drums extracted from the classic arcade MIDIs
-    gyruss: { mel: [69,67,69,67,65,64,62,61,62,49,49,49,49,49,49,52,50,50,50,45,50,57,52,57,53,57,50,57,52,57,53,57,55,57,52,57,53,57,55,57,57,57,53,57,55,57,57,57], bass: [45,43,45,43,41,40,38,37,38,38,37,40,40,40,40,40,38,38,38,45,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38], drum: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,1,0,1,1,1,0,1,0,1,0,1,0,0,0,1,0,1,0,1,1,1,0,1,0,1,0] },
-    gyrussb: { mel: [57,57,57,57,53,52,50,49,50,50,49,52,57,58,61,64,54,52,50,38,45,38,45,38,45,38,45,38,69,68,67,66,65,64,63,62,61,60,59,58,57,56,62,64,65,62,64,65], bass: [45,43,45,45,41,40,38,37,38,38,37,40,45,46,49,40,42,40,38,38,45,38,45,38,45,38,45,38,45,45,38,38,45,45,38,38,45,45,38,38,45,45,38,45,38,45,38,45], drum: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] },
-    pacman: { mel: [52,51,49,47,51,49,52,51,52,54,51,49,51,52,49,51,52,54,51,52,54,56,58,59,58,59,59], bass: [40,39,49,47,39,49,40,47,47,42,39,49,49,40,46,47,49,39,47,49,39,40,49,47,49,47,47], drum: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] },
-    polepos: { mel: [54,54,54,54,56,52,49,47,49,52,54,54,56,52,49,47,49,52,54,57,59,61,61], bass: [42,37,37,37,35,35,35,37,37,37,42,42,37,37,37,37,37,37,35,35,35,37,49], drum: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] },
-    mrdo: { mel: [55,60,59,57,55,55,55,55,53,57,55,53,52,50,52,53,55,57,60,59,59,57,59,55,55], bass: [43,48,47,45,43,43,43,43,41,45,43,41,40,50,40,41,43,45,48,47,47,45,47,43,43], drum: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] },
-    pooyan: { mel: [55,57,59,60,55,52,48,57,59,57,55,53,52,50,48,48], bass: [43,45,47,48,43,40,48,45,47,45,43,41,40,50,48,48], drum: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] },
-    montezuma: { mel: [47,47,47,52,56,56], bass: [35,35,35,40,44,44], drum: [0,0,0,0,0,0] },
-    boulder: { mel: [45,45,49,52,57,47,50,52,59,53,55,57,60,55,66,56,64,45,57,40,47,43,59,47,43,45,57,40,47,53,69,57,53,43,55,38,45,51,67,55,51,40,56,42,57,50,50,62], bass: [33,33,33,45,48,31,42,43,50,29,29,41,29,43,50,44,48,33,33,33,33,31,31,31,31,33,33,33,33,41,41,41,41,31,31,31,31,39,39,39,39,28,40,28,40,38,38,33], drum: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] },
-    vanguard: { mel: [51,58,60,58,57,58,60,58,57,58,56,55,56,55,53,48,55,48,48,55,51,58,60,58,57,58,60,58,57,58,56,55,56,55,53,48,55,48,48,55,51,58,60,58,57,58,60,58], bass: [39,46,48,46,45,46,48,46,45,46,44,43,44,43,41,48,43,48,48,43,39,46,48,46,45,46,48,46,45,46,44,43,44,43,41,48,43,48,48,43,39,46,48,46,45,46,48,46], drum: [1,1,1,0,0,1,1,0,1,1,0,0,1,0,0,1,1,1,1,1,1,1,1,0,0,1,1,0,1,1,0,0,1,0,0,1,1,1,1,1,1,1,1,0,0,1,1,0] },
+    invaders: arpSong(_inv, 0.22),
+    toccata:  arpSong(_toc, 0.26),
+    climber:  arpSong(_cli, 0.20),
+    caper:    arpSong(_cap, 0.20),
+    gyruss: SONGS.gyruss, gyrussb: SONGS.gyrussb, pacman: SONGS.pacman,
+    polepos: SONGS.polepos, mrdo: SONGS.mrdo, pooyan: SONGS.pooyan,
+    montezuma: SONGS.montezuma, boulder: SONGS.boulder, vanguard: SONGS.vanguard,
   };
 
   const audio = {
     ctx: null, muted: false, master: null, noiseBuf: null,
-    nextStepTime: 0, stepIndex: 0, theme: THEMES.invaders, _pv: [],
-    setTheme(name) { this.theme = THEMES[name] || THEMES.invaders; this.stepIndex = 0; },
+    song: THEMES.invaders, clock: 0, cursor: 0, _last: 0, _pv: [],
+    setTheme(name) { this.song = THEMES[name] || THEMES.invaders; this.clock = 0; this.cursor = 0; },
     ensureStarted() {
       if (this.ctx) return;
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return;
       this.ctx = new AC();
-      this.master = this.ctx.createDynamicsCompressor(); // keep the mix from clipping
+      this.master = this.ctx.createDynamicsCompressor(); // tame the polyphonic mix
       this.master.connect(this.ctx.destination);
       const sr = this.ctx.sampleRate, b = this.ctx.createBuffer(1, Math.floor(sr * 0.2), sr), d = b.getChannelData(0);
       for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
       this.noiseBuf = b;
-      this.nextStepTime = this.ctx.currentTime + 0.1;
+      this._last = this.ctx.currentTime;
     },
     tone(midi, when, type, peak, dur) {
-      if (!midi) return null;
       const osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
+      const d = Math.max(0.05, dur);
       osc.type = type; osc.frequency.value = midiHz(midi);
       gain.gain.setValueAtTime(0.0002, when);
-      gain.gain.exponentialRampToValueAtTime(peak, when + 0.012);
-      gain.gain.exponentialRampToValueAtTime(0.0008, when + dur);
+      gain.gain.exponentialRampToValueAtTime(peak, when + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0006, when + d);
       osc.connect(gain).connect(this.master);
-      osc.start(when); osc.stop(when + dur + 0.03);
+      osc.start(when); osc.stop(when + d + 0.03);
       return osc;
     },
     noiseHit(when) {
       const src = this.ctx.createBufferSource(); src.buffer = this.noiseBuf;
       const gain = this.ctx.createGain(), hp = this.ctx.createBiquadFilter();
       hp.type = 'highpass'; hp.frequency.value = 1400;
-      gain.gain.setValueAtTime(0.16, when);
-      gain.gain.exponentialRampToValueAtTime(0.001, when + 0.07);
+      gain.gain.setValueAtTime(0.14, when);
+      gain.gain.exponentialRampToValueAtTime(0.001, when + 0.06);
       src.connect(hp).connect(gain).connect(this.master);
-      src.start(when); src.stop(when + 0.09);
+      src.start(when); src.stop(when + 0.08);
     },
-    _step(th, i, when, step, collect) {
-      const m = this.tone(th.mel[i], when, 'square', 0.085, step * 0.9);
-      const b = this.tone(th.bass[i], when, 'triangle', 0.17, step * 0.95);
-      if (th.drum[i]) this.noiseHit(when);
-      if (collect) { if (m) this._pv.push(m); if (b) this._pv.push(b); }
+    play(v, midi, when, dur, collect) {
+      if (v === 2) { this.noiseHit(when); return; }
+      const o = this.tone(midi, when, v === 1 ? 'triangle' : 'square', v === 1 ? 0.15 : 0.06, Math.min(dur, 0.5));
+      if (collect && o) this._pv.push(o);
     },
     schedule() {
-      if (!this.ctx || this.muted || game.state !== State.PLAYING || !this.theme) return;
-      const { noteIntervalMs } = game.audioParams();
-      const step = (noteIntervalMs / 1000) * 1.7; // distance-driven tempo (the sonar)
-      const look = this.ctx.currentTime + 0.13;
-      const th = this.theme, L = th.mel.length;
-      while (this.nextStepTime < look) {
-        if (this.nextStepTime < this.ctx.currentTime) this.nextStepTime = this.ctx.currentTime;
-        this._step(th, this.stepIndex % L, this.nextStepTime, step, false);
-        this.stepIndex += 1;
-        this.nextStepTime += step;
+      if (!this.ctx || this.muted || game.state !== State.PLAYING) return;
+      const s = this.song; if (!s || !s.n || !s.n.length) return;
+      const { closeness } = game.audioParams();
+      const tempo = 0.8 + closeness * 1.0; // 0.8×..1.8× — the sonar accelerates the tune
+      const now = this.ctx.currentTime;
+      let dt = now - this._last; this._last = now;
+      if (!(dt > 0) || dt > 0.25) dt = 0.016;
+      this.clock += dt * tempo;
+      const L = s.loop || 1;
+      if (this.clock >= L) { this.clock %= L; this.cursor = 0; }
+      const ahead = this.clock + 0.12 * tempo + 0.03, N = s.n;
+      while (this.cursor < N.length && N[this.cursor][0] <= ahead) {
+        const e = N[this.cursor];
+        this.play(e[3], e[2], now + Math.max(0, (e[0] - this.clock) / tempo), e[1] / tempo, false);
+        this.cursor++;
       }
     },
-    /** Audition the current theme (~3.6s, looping). Cancels any in-flight
-     *  preview so rapidly switching tunes doesn't stack up. */
+    /** Audition the current theme (~3.6s, looping) at normal tempo. Cancels any
+     *  in-flight preview so rapidly switching tunes doesn't stack up. */
     preview() {
       this.ensureStarted();
       if (!this.ctx || this.muted) return;
       const now = this.ctx.currentTime;
       for (const o of this._pv) { try { o.stop(now); } catch (e) {} }
       this._pv = [];
-      const step = 0.2, n = Math.round(3.6 / step), th = this.theme, L = th.mel.length;
-      let when = now + 0.05;
-      for (let k = 0; k < n; k++) { this._step(th, k % L, when, step, true); when += step; }
+      const s = this.song; if (!s || !s.n) return;
+      const DUR = 3.6, L = s.loop || 1;
+      for (let base = 0; base < DUR; base += L) {
+        for (const e of s.n) { const at = base + e[0]; if (at < DUR) this.play(e[3], e[2], now + 0.05 + at, e[1], true); }
+      }
     },
     catchJingle() {
       if (!this.ctx || this.muted) return;
