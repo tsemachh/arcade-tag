@@ -538,7 +538,7 @@
   const midiHz = (n) => 440 * Math.pow(2, (n - 69) / 12);
   const SONGS = window.GameSongs || {};
   const THEMES = {
-    gyruss: SONGS.gyruss, gyrussb: SONGS.gyrussb, pacman: SONGS.pacman,
+    gyruss: SONGS.gyruss, pacman: SONGS.pacman,
     polepos: SONGS.polepos, mrdo: SONGS.mrdo, pooyan: SONGS.pooyan,
     montezuma: SONGS.montezuma, boulder: SONGS.boulder, vanguard: SONGS.vanguard,
   };
@@ -623,9 +623,9 @@
     },
   };
 
-  const THEME_ORDER = ['gyruss', 'gyrussb', 'pacman', 'polepos', 'mrdo', 'pooyan', 'montezuma', 'boulder', 'vanguard'];
+  const THEME_ORDER = ['gyruss', 'pacman', 'polepos', 'mrdo', 'pooyan', 'montezuma', 'boulder', 'vanguard'];
   const THEME_NAMES = {
-    gyruss: 'Gyruss', gyrussb: 'Gyruss B', pacman: 'Pac-Man', polepos: 'Pole Pos',
+    gyruss: 'Gyruss', pacman: 'Pac-Man', polepos: 'Pole Pos',
     mrdo: 'Mr Do', pooyan: 'Pooyan', montezuma: 'Montezuma', boulder: 'Boulder', vanguard: 'Vanguard',
   };
   if (THEME_ORDER.indexOf(settings.theme) < 0) settings.theme = 'boulder'; // drop removed/unknown themes
