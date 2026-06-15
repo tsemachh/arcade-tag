@@ -537,24 +537,7 @@
   // source MIDI; playback tempo scales with how close the players are — the sonar.
   const midiHz = (n) => 440 * Math.pow(2, (n - 69) / 12);
   const SONGS = window.GameSongs || {};
-  // Turn a plain melody (MIDI notes, 0 = rest) into a song: lead + octave bass.
-  function arpSong(mel, step) {
-    const nn = [];
-    for (let i = 0; i < mel.length; i++) {
-      const pch = mel[i]; if (!pch) continue;
-      const tt = +(i * step).toFixed(3);
-      nn.push([tt, step * 0.9, pch, pch < 48 ? 1 : 0]);
-      nn.push([tt, step * 0.95, pch - 12, 1]);
-    }
-    return { loop: +(mel.length * step).toFixed(3), n: nn };
-  }
-  const _toc = [57, 55, 57, 0, 55, 53, 52, 50, 49, 50, 0, 0]; // Bach BWV 565 (public domain)
-  const _cli = [48, 52, 55, 60, 59, 55, 52, 55];
-  const _cap = [45, 49, 52, 49, 45, 52, 50, 47];
   const THEMES = {
-    toccata:  arpSong(_toc, 0.26),
-    climber:  arpSong(_cli, 0.20),
-    caper:    arpSong(_cap, 0.20),
     gyruss: SONGS.gyruss, gyrussb: SONGS.gyrussb, pacman: SONGS.pacman,
     polepos: SONGS.polepos, mrdo: SONGS.mrdo, pooyan: SONGS.pooyan,
     montezuma: SONGS.montezuma, boulder: SONGS.boulder, vanguard: SONGS.vanguard,
@@ -640,10 +623,8 @@
     },
   };
 
-  const THEME_ORDER = ['toccata', 'climber', 'caper',
-    'gyruss', 'gyrussb', 'pacman', 'polepos', 'mrdo', 'pooyan', 'montezuma', 'boulder', 'vanguard'];
+  const THEME_ORDER = ['gyruss', 'gyrussb', 'pacman', 'polepos', 'mrdo', 'pooyan', 'montezuma', 'boulder', 'vanguard'];
   const THEME_NAMES = {
-    toccata: 'Toccata', climber: 'Climber', caper: 'Caper',
     gyruss: 'Gyruss', gyrussb: 'Gyruss B', pacman: 'Pac-Man', polepos: 'Pole Pos',
     mrdo: 'Mr Do', pooyan: 'Pooyan', montezuma: 'Montezuma', boulder: 'Boulder', vanguard: 'Vanguard',
   };
