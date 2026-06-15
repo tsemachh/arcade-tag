@@ -477,6 +477,9 @@
     if (game.state === State.READY || game.state === State.ROUND_OVER || game.state === State.MATCH_OVER) {
       const b = buttons.find(b => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h);
       if (b) { b.fn(); if (game.state === State.READY) saveSettings(); return; }
+      // online guest: a tap on empty space asks the host to start / next / rematch
+      // (mirrors the guest's Space key, so a phone player never needs a keyboard)
+      if (amGuest()) { NET.send({ t: 'go' }); return; }
       // tap anywhere else still advances between rounds
       if (game.state === State.ROUND_OVER) { applySpeed(); game.startRound(); }
     }
