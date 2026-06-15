@@ -567,6 +567,7 @@
     e.preventDefault();
     const t = e.changedTouches[0];
     const [x, y] = canvasPos(t.clientX, t.clientY);
+    if (tryExit(x, y)) return;            // in-game ✕ → back to menu (touch has no Esc key)
     if (game.state === State.PLAYING) {
       // floating joystick: base anchors wherever the finger lands
       joy = { id: t.identifier, ax: x, ay: y, x, y };
@@ -708,11 +709,23 @@
   let seenEvent = null;
   let shake = 0;      // screen-shake timer (s), triggered by impactful events
 
+  /** Quick haptic pulse on phones (silently ignored where unsupported). */
+  function buzz(p) { try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) {} }
+
   function spawnEffect(ev) {
     if (!ev) return;
     const big = ev.type !== 'pickup';
     effects.push({ kind: big ? 'boom' : 'pop', x: ev.x, y: ev.y, t: 0 });
-    if (big) shake = Math.max(shake, 0.3); // catch / infect / zone → shake
+    // Impact feedback: a catch is the money moment — strongest shake + a double
+    // haptic buzz. Other events get a lighter nudge so the catch still stands out.
+    switch (ev.type) {
+      case 'catch':
+      case 'survivor': shake = Math.max(shake, 0.6); buzz([0, 30, 45, 80]); break;
+      case 'infect':   shake = Math.max(shake, 0.4); buzz(25); break;
+      case 'zone':     shake = Math.max(shake, 0.4); buzz([0, 25, 35, 55]); break;
+      case 'pickup':   buzz(12); break;
+      default:         if (big) shake = Math.max(shake, 0.3);
+    }
   }
 
   /** Float a "+1" above whoever just won the round. */
@@ -1215,18 +1228,45 @@
     ctx.restore();
   }
 
+  // In-game back-to-menu button — touch only (desktop uses Esc). Drawn top-left
+  // during any non-menu state; its hit-rect is checked before the joystick.
+  let exitBtn = null;
+  function drawExitButton() {
+    if (!isTouch || game.state === State.READY) { exitBtn = null; return; }
+    const w = 30, h = 26, x = 8, y = 7;
+    exitBtn = { x, y, w, h };
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.strokeStyle = '#888888'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.roundRect(x, y, w, h, 6); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#dddddd';
+    ctx.font = '15px "Helvetica Neue", Arial, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('✕', x + w / 2, y + h / 2 + 1);
+    ctx.restore();
+  }
+  function tryExit(x, y) {
+    if (!exitBtn) return false;
+    if (x < exitBtn.x || x > exitBtn.x + exitBtn.w || y < exitBtn.y || y > exitBtn.y + exitBtn.h) return false;
+    audio.ensureStarted();
+    if (isOnline()) leaveOnline();
+    game.resetMatch();
+    return true;
+  }
+
   function drawHud() {
     ctx.font = '16px "Helvetica Neue", Arial, sans-serif';
     ctx.fillStyle = '#ffffff';
+    const lx = isTouch ? 46 : 14; // leave room for the ✕ button on touch
     if (game.mode === 'koth') {
       const win = game.cfg.kothWinSeconds;
       ctx.textAlign = 'left';
-      ctx.fillText(`P1 ${Math.floor(game.zoneScore[0])}/${win} · ${game.scores[0]}`, 14, 24);
+      ctx.fillText(`P1 ${Math.floor(game.zoneScore[0])}/${win} · ${game.scores[0]}`, lx, 24);
       ctx.textAlign = 'right';
       ctx.fillText(`${game.scores[1]} · ${Math.floor(game.zoneScore[1])}/${win} P2`, canvas.width - 14, 24);
     } else if (game.mode === 'infection') {
       ctx.textAlign = 'left';
-      ctx.fillText(game.scores.map((s, i) => `P${i + 1} ${s}`).join(' · '), 14, 24);
+      ctx.fillText(game.scores.map((s, i) => `P${i + 1} ${s}`).join(' · '), lx, 24);
       const healthy = game.infected.filter(v => !v).length;
       ctx.save();
       ctx.textAlign = 'right';
@@ -1235,7 +1275,7 @@
       ctx.restore();
     } else {
       ctx.textAlign = 'left';
-      ctx.fillText(`P1 ${game.scores[0]}`, 14, 24);
+      ctx.fillText(`P1 ${game.scores[0]}`, lx, 24);
       ctx.textAlign = 'right';
       ctx.fillText(`${game.scores[1]} P2`, canvas.width - 14, 24);
     }
@@ -1266,6 +1306,7 @@
     }
 
     if (game.state !== State.READY) drawHud(); // menu keeps its corners clear for the language toggle
+    drawExitButton(); // touch-only ✕ (no-op on desktop / in the menu)
 
     if (game.state === State.PLAYING) {
       // prominent round timer — pulses red when time is almost up
