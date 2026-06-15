@@ -2,6 +2,8 @@
 
 **Play it live: https://tsemachh.github.io/arcade-tag/**
 
+![Arcade Tag gameplay — the white-ringed chaser runs down the runner, leaving rainbow trails, ending in a catch](gameplay.gif)
+
 A minimalist arcade tag game in a single page — no build, no dependencies,
 no server. Chase, survive, and (in radar mode) find your opponent by sound.
 Bilingual (English / עברית, auto-detected), installable as an app, and
