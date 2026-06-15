@@ -45,6 +45,10 @@
       #rotate .he { display: block; margin-top: 6px; opacity: .8; font-size: 19px; }
     }
     @keyframes tilt { 0%,55% { transform: rotate(0); } 80%,100% { transform: rotate(-90deg); } }
+    /* While tilt steering is on, the player is moving the phone around, so the
+       orientation sensor flickers portrait↔landscape. Never block play then. */
+    html.tilt #rotate { display: none !important; }
+    html.tilt canvas { display: block !important; }
 </style>
 </head>
 <body>

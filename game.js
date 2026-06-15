@@ -77,13 +77,17 @@
   }
   function enableTilt() {
     if (!tiltSupported()) return;
-    const start = () => { window.addEventListener('deviceorientation', onTilt); tilt.active = true; tilt.have = false; tilt.sx = tilt.sy = 0; };
+    const start = () => {
+      window.addEventListener('deviceorientation', onTilt);
+      tilt.active = true; tilt.have = false; tilt.sx = tilt.sy = 0;
+      try { document.documentElement.classList.add('tilt'); } catch (e) {} // suppress the rotate overlay while tilting
+    };
     const DO = window.DeviceOrientationEvent;
     if (typeof DO.requestPermission === 'function') {     // iOS 13+ needs a gesture-driven prompt
       DO.requestPermission().then((s) => { if (s === 'granted') start(); }).catch(() => {});
     } else { start(); }                                    // Android / others: just listen
   }
-  function disableTilt() { window.removeEventListener('deviceorientation', onTilt); tilt.active = false; }
+  function disableTilt() { window.removeEventListener('deviceorientation', onTilt); tilt.active = false; try { document.documentElement.classList.remove('tilt'); } catch (e) {} }
   function recalibrateTilt() { if (tilt.active) { tilt.have = false; tilt.sx = tilt.sy = 0; } }
   function cycleSens() { const o = ['low', 'med', 'high']; settings.tiltSens = o[(o.indexOf(settings.tiltSens) + 1) % o.length]; saveSettings(); }
   function sensKey() { return 'sens' + settings.tiltSens.charAt(0).toUpperCase() + settings.tiltSens.slice(1); }
