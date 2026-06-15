@@ -50,6 +50,7 @@
   let showHelp = false;
   try { showHelp = !localStorage.getItem('arcadeTagSeen'); } catch (e) {}
   function dismissHelp() { showHelp = false; try { localStorage.setItem('arcadeTagSeen', '1'); } catch (e) {} }
+  let showThemes = false; // music picker overlay
 
   // ---------- i18n ----------
   const STR = {
@@ -137,6 +138,8 @@
       help3: 'אספו בונוסים: ⚡ האצה · ❄ הקפאה · 👻 היעלמות · ↔ תופס רחב. השובלים לקישוט.',
       help4: 'תנועה: חצים / W,A,S,D / מגע · ב־2 שחקנים: P2 בחצים · רווח: התחלה',
       gotIt: 'הבנתי',
+      musicTitle: 'מוזיקה',
+      closeBtn: 'סיום',
       chasesRunner: (chaser, runner) => `${chaser} רודף את ${runner}`,
       startsInfected: (name) => `${name} מתחיל נגוע — ברחו!`,
       wonMatch: (who) => `${who} ניצח את המשחק!`,
@@ -230,6 +233,8 @@
       help3: 'Grab power-ups: ⚡ dash · ❄ freeze · 👻 ghost · ↔ wide. Trails are decoration.',
       help4: 'Move: arrows / W,A,S,D / touch · local 2P: P2 uses arrows · Space: start',
       gotIt: 'Got it',
+      musicTitle: 'Music',
+      closeBtn: 'Done',
       chasesRunner: (chaser, runner) => `${chaser} chases ${runner}`,
       startsInfected: (name) => `${name} starts infected — run!`,
       wonMatch: (who) => `${who} won the match!`,
@@ -442,10 +447,11 @@
     if (e.code === 'Space') {
       e.preventDefault();
       if (showHelp) { dismissHelp(); return; }
+      if (showThemes) { showThemes = false; return; }
       if (amGuest()) { NET.send({ t: 'go' }); return; } // ask the host to start / rematch
       advanceState(); return;
     }
-    if (e.code === 'Escape') { if (!amGuest()) game.resetMatch(); return; } // back to menu anytime
+    if (e.code === 'Escape') { if (showThemes) { showThemes = false; return; } if (!amGuest()) game.resetMatch(); return; } // back to menu anytime
     if (e.code === 'KeyM') { audio.muted = !audio.muted; return; }
     if (game.state === State.READY && !isOnline() && (e.code === 'Digit1' || e.code === 'Digit2')) {
       settings.opponent = (e.code === 'Digit1' || settings.gameMode === 'infection') ? 'cpu' : 'local';
@@ -959,7 +965,7 @@
       () => setLang(lang === 'he' ? 'en' : 'he'));
     drawButton(t('radarLabel'), canvas.width - 80, 12, 130, 24, settings.radar,
       () => { settings.radar = !settings.radar; try { localStorage.setItem('arcadeTagRadar', settings.radar ? '1' : '0'); } catch (e) {} });
-    drawButton('♪ ' + THEME_NAMES[settings.theme], canvas.width - 80, 44, 130, 24, false, cycleTheme);
+    drawButton('♪ ' + THEME_NAMES[settings.theme], canvas.width - 80, 44, 130, 24, showThemes, () => { showThemes = true; audio.ensureStarted(); });
     ctx.save();
     ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 18;
     centerText(t('title'), 70, 38);
@@ -1060,6 +1066,27 @@
     ctx.restore();
   }
 
+  /** Music picker overlay — a grid of all tunes; tap one to select + audition. */
+  function drawThemeMenu() {
+    buttons = []; // the overlay owns all taps while open
+    ctx.save(); ctx.fillStyle = 'rgba(0,0,0,0.9)'; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.restore();
+    ctx.save(); ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 14; centerText('♪ ' + t('musicTitle'), 64, 30); ctx.restore();
+    const cols = 3, w = 180, h = 34, gx = 16, gy = 12;
+    const x0 = canvas.width / 2 - (cols * w + (cols - 1) * gx) / 2 + w / 2, y0 = 108;
+    THEME_ORDER.forEach((k, idx) => {
+      const cx = x0 + (idx % cols) * (w + gx), cy = y0 + Math.floor(idx / cols) * (h + gy);
+      drawButton(THEME_NAMES[k], cx, cy, w, h, settings.theme === k, () => {
+        settings.theme = k;
+        try { localStorage.setItem('arcadeTagTheme', k); } catch (e) {}
+        audio.setTheme(k); audio.preview(); // select + audition; overlay stays open to browse
+      });
+    });
+    const closeY = y0 + Math.ceil(THEME_ORDER.length / cols) * (h + gy) + 16;
+    ctx.save(); ctx.shadowColor = colorAt(game.time); ctx.shadowBlur = 12;
+    drawButton(t('closeBtn'), canvas.width / 2, closeY, 150, 38, true, () => { showThemes = false; });
+    ctx.restore();
+  }
+
   /** Online (Phase 3) sub-panel: host / join actions, room code, status. */
   function drawOnlinePanel(y) {
     const st = NET ? NET.status : 'idle';
@@ -1104,7 +1131,7 @@
       () => setLang(lang === 'he' ? 'en' : 'he'));
     drawButton(t('radarLabel'), canvas.width - 80, 12, 130, 24, settings.radar,
       () => { settings.radar = !settings.radar; try { localStorage.setItem('arcadeTagRadar', settings.radar ? '1' : '0'); } catch (e) {} });
-    drawButton('♪ ' + THEME_NAMES[settings.theme], canvas.width - 80, 44, 130, 24, false, cycleTheme);
+    drawButton('♪ ' + THEME_NAMES[settings.theme], canvas.width - 80, 44, 130, 24, showThemes, () => { showThemes = true; audio.ensureStarted(); });
     ctx.save();
     ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 18;
     centerText(t('title'), 150, 38);
@@ -1210,6 +1237,7 @@
     if (game.state === State.READY) {
       if (amGuest()) drawGuestWaiting();
       else { drawMenu(); if (showHelp) drawHelpOverlay(); }
+      if (showThemes && !showHelp) drawThemeMenu();
     } else if (game.state === State.COUNTDOWN) {
       const remain = 3 - game.stateTime;
       const left = Math.ceil(remain);
