@@ -21,7 +21,7 @@
 
   // ---------- settings (start-screen selectable) ----------
   // opponent: 'cpu' (vs computer) | 'local' (two players, one keyboard) | 'online'
-  const settings = { opponent: 'cpu', difficulty: 'medium', speed: 'normal', gameMode: 'classic', radar: true, theme: 'boulder' };
+  const settings = { opponent: 'cpu', difficulty: 'medium', speed: 'normal', gameMode: 'classic', radar: true, theme: 'boulder', tiltSens: 'med' };
   try { const sv = localStorage.getItem('arcadeTagTheme'); if (sv) settings.theme = sv; } catch (e) {}
   try { const rv = localStorage.getItem('arcadeTagRadar'); if (rv !== null) settings.radar = rv === '1'; } catch (e) {}
   // Restore the player's last choices so the menu opens where they left off.
@@ -33,17 +33,72 @@
       settings.gameMode = pick(s.gameMode, ['classic', 'koth', 'infection'], settings.gameMode);
       settings.difficulty = pick(s.difficulty, ['easy', 'medium', 'hard'], settings.difficulty);
       settings.speed = pick(s.speed, ['slow', 'normal', 'fast'], settings.speed);
+      settings.tiltSens = pick(s.tiltSens, ['low', 'med', 'high'], settings.tiltSens);
     } catch (e) {}
   })();
   function saveSettings() {
     try {
       localStorage.setItem('arcadeTagSettings', JSON.stringify({
         opponent: settings.opponent, gameMode: settings.gameMode,
-        difficulty: settings.difficulty, speed: settings.speed,
+        difficulty: settings.difficulty, speed: settings.speed, tiltSens: settings.tiltSens,
       }));
     } catch (e) {}
   }
   window.__settings = settings; // verification hook
+
+  // ---------- tilt steering (opt-in mobile gyroscope control) ----------
+  // The game is "always moving, you only steer", so the phone's tilt maps
+  // straight to a heading. Opt-in (the joystick stays the default), with a
+  // neutral pose captured on enable / at each round start, a deadzone so small
+  // wobble keeps you going straight, and screen-orientation-aware axis remap so
+  // it works the same in portrait or landscape.
+  const isTouch = (('ontouchstart' in window) || (navigator.maxTouchPoints > 0));
+  const tilt = { active: false, have: false, baseB: 0, baseG: 0, sx: 0, sy: 0 };
+  const TILT_DEAD = { low: 9, med: 5.5, high: 3 }; // degrees of tilt before it registers
+  function tiltSupported() { return typeof window.DeviceOrientationEvent !== 'undefined'; }
+  function screenAngle() {
+    try { if (screen.orientation && typeof screen.orientation.angle === 'number') return screen.orientation.angle; } catch (e) {}
+    if (typeof window.orientation === 'number') return (window.orientation + 360) % 360;
+    return 0;
+  }
+  function onTilt(e) {
+    if (e.beta == null || e.gamma == null) return;
+    if (!tilt.have) { tilt.baseB = e.beta; tilt.baseG = e.gamma; tilt.have = true; }
+    const dB = e.beta - tilt.baseB, dG = e.gamma - tilt.baseG;
+    let x, y;
+    switch (screenAngle()) {            // remap device axes into screen space
+      case 90:  x = dB;  y = -dG; break;
+      case 180: x = -dG; y = -dB; break;
+      case 270: x = -dB; y = dG;  break;
+      default:  x = dG;  y = dB;          // 0 / portrait
+    }
+    tilt.sx += (x - tilt.sx) * 0.35;    // light smoothing to tame jitter
+    tilt.sy += (y - tilt.sy) * 0.35;
+  }
+  function enableTilt() {
+    if (!tiltSupported()) return;
+    const start = () => { window.addEventListener('deviceorientation', onTilt); tilt.active = true; tilt.have = false; tilt.sx = tilt.sy = 0; };
+    const DO = window.DeviceOrientationEvent;
+    if (typeof DO.requestPermission === 'function') {     // iOS 13+ needs a gesture-driven prompt
+      DO.requestPermission().then((s) => { if (s === 'granted') start(); }).catch(() => {});
+    } else { start(); }                                    // Android / others: just listen
+  }
+  function disableTilt() { window.removeEventListener('deviceorientation', onTilt); tilt.active = false; }
+  function recalibrateTilt() { if (tilt.active) { tilt.have = false; tilt.sx = tilt.sy = 0; } }
+  function cycleSens() { const o = ['low', 'med', 'high']; settings.tiltSens = o[(o.indexOf(settings.tiltSens) + 1) % o.length]; saveSettings(); }
+  function sensKey() { return 'sens' + settings.tiltSens.charAt(0).toUpperCase() + settings.tiltSens.slice(1); }
+  window.__tilt = tilt; // verification hook
+
+  // ---------- fullscreen (hide the mobile browser URL bar) ----------
+  function fsElement() { return document.fullscreenElement || document.webkitFullscreenElement || null; }
+  function fsSupported() { const el = document.documentElement; return !!(el.requestFullscreen || el.webkitRequestFullscreen); }
+  function toggleFullscreen() {
+    const el = document.documentElement;
+    try {
+      if (fsElement()) { (document.exitFullscreen || document.webkitExitFullscreen).call(document); }
+      else { (el.requestFullscreen || el.webkitRequestFullscreen).call(el); }
+    } catch (e) {}
+  }
   const RADAR_FOG = 16; // trail points hidden at each head while radar is on
 
   // onboarding: show the how-to overlay once for first-time visitors
@@ -140,6 +195,7 @@
       gotIt: 'הבנתי',
       musicTitle: 'מוזיקה',
       closeBtn: 'סיום',
+      tilt: 'הטיה', sensLow: 'רגישות: נמוכה', sensMed: 'רגישות: בינונית', sensHigh: 'רגישות: גבוהה',
       chasesRunner: (chaser, runner) => `${chaser} רודף את ${runner}`,
       startsInfected: (name) => `${name} מתחיל נגוע — ברחו!`,
       wonMatch: (who) => `${who} ניצח את המשחק!`,
@@ -235,6 +291,7 @@
       gotIt: 'Got it',
       musicTitle: 'Music',
       closeBtn: 'Done',
+      tilt: 'Tilt', sensLow: 'Sens: Low', sensMed: 'Sens: Med', sensHigh: 'Sens: High',
       chasesRunner: (chaser, runner) => `${chaser} chases ${runner}`,
       startsInfected: (name) => `${name} starts infected — run!`,
       wonMatch: (who) => `${who} won the match!`,
@@ -1027,6 +1084,12 @@
         : t('hintLocal'),
       494, 13, '#888888');
     drawButton('?', 30, 44, 32, 24, false, () => { showHelp = true; }); // reopen how-to
+    // Fullscreen (hides the mobile URL bar) + opt-in tilt steering, lower-left.
+    if (fsSupported()) drawButton(fsElement() ? '⛶ ✕' : '⛶', 30, 76, 32, 24, !!fsElement(), toggleFullscreen);
+    if (isTouch && tiltSupported()) {
+      drawButton('⌖ ' + t('tilt'), 102, 76, 104, 24, tilt.active, () => { tilt.active ? disableTilt() : enableTilt(); });
+      if (tilt.active) drawButton(t(sensKey()), 102, 104, 104, 24, false, cycleSens);
+    }
   }
 
   /** First-run (or '?'-triggered) how-to-play overlay drawn over the menu. */
@@ -1358,10 +1421,15 @@
 
   /** Read the local player's intended direction (joystick > keys). */
   function localInput() {
-    if (joy) {
+    if (joy) {                                   // a finger on the joystick always wins
       const dx = joy.x - joy.ax, dy = joy.y - joy.ay;
       if (Math.hypot(dx, dy) > 12) return [dx, dy];
       return [0, 0];
+    }
+    if (tilt.active && tilt.have) {              // otherwise, tilt steering if enabled
+      const dead = TILT_DEAD[settings.tiltSens] || 5.5;
+      if (Math.hypot(tilt.sx, tilt.sy) > dead) return [tilt.sx, tilt.sy];
+      return [0, 0];                             // near neutral → keep current heading
     }
     return p1Dir();
   }
@@ -1401,6 +1469,7 @@
       if ((game.state === State.ROUND_OVER || game.state === State.MATCH_OVER) && prevState === State.PLAYING) {
         audio.catchJingle(); spawnScorePop();
       }
+      if (game.state === State.COUNTDOWN && prevState !== State.COUNTDOWN) recalibrateTilt();
       prevState = game.state;
       audio.schedule();
       draw(dt);
@@ -1429,6 +1498,7 @@
     if ((game.state === State.ROUND_OVER || game.state === State.MATCH_OVER) && prevState === State.PLAYING) {
       audio.catchJingle(); spawnScorePop();
     }
+    if (game.state === State.COUNTDOWN && prevState !== State.COUNTDOWN) recalibrateTilt();
     prevState = game.state;
     // Host: broadcast authoritative state to the guest (throttled), in every
     // game state so the guest mirrors the menu, countdown, play, and results.
