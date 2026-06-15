@@ -542,12 +542,10 @@
     }
     return { loop: +(mel.length * step).toFixed(3), n: nn };
   }
-  const _inv = [40, 38, 36, 35];
   const _toc = [57, 55, 57, 0, 55, 53, 52, 50, 49, 50, 0, 0]; // Bach BWV 565 (public domain)
   const _cli = [48, 52, 55, 60, 59, 55, 52, 55];
   const _cap = [45, 49, 52, 49, 45, 52, 50, 47];
   const THEMES = {
-    invaders: arpSong(_inv, 0.22),
     toccata:  arpSong(_toc, 0.26),
     climber:  arpSong(_cli, 0.20),
     caper:    arpSong(_cap, 0.20),
@@ -558,8 +556,8 @@
 
   const audio = {
     ctx: null, muted: false, master: null, noiseBuf: null,
-    song: THEMES.invaders, clock: 0, cursor: 0, _last: 0, _pv: [],
-    setTheme(name) { this.song = THEMES[name] || THEMES.invaders; this.clock = 0; this.cursor = 0; },
+    song: THEMES.boulder, clock: 0, cursor: 0, _last: 0, _pv: [],
+    setTheme(name) { this.song = THEMES[name] || THEMES.boulder; this.clock = 0; this.cursor = 0; },
     ensureStarted() {
       if (this.ctx) return;
       const AC = window.AudioContext || window.webkitAudioContext;
@@ -636,14 +634,15 @@
     },
   };
 
-  audio.setTheme(settings.theme);
-  const THEME_ORDER = ['invaders', 'toccata', 'climber', 'caper',
+  const THEME_ORDER = ['toccata', 'climber', 'caper',
     'gyruss', 'gyrussb', 'pacman', 'polepos', 'mrdo', 'pooyan', 'montezuma', 'boulder', 'vanguard'];
   const THEME_NAMES = {
-    invaders: 'Invaders', toccata: 'Toccata', climber: 'Climber', caper: 'Caper',
+    toccata: 'Toccata', climber: 'Climber', caper: 'Caper',
     gyruss: 'Gyruss', gyrussb: 'Gyruss B', pacman: 'Pac-Man', polepos: 'Pole Pos',
     mrdo: 'Mr Do', pooyan: 'Pooyan', montezuma: 'Montezuma', boulder: 'Boulder', vanguard: 'Vanguard',
   };
+  if (THEME_ORDER.indexOf(settings.theme) < 0) settings.theme = 'boulder'; // drop removed/unknown themes
+  audio.setTheme(settings.theme);
   function cycleTheme() {
     const i = THEME_ORDER.indexOf(settings.theme);
     settings.theme = THEME_ORDER[(i + 1) % THEME_ORDER.length];
