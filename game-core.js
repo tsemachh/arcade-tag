@@ -19,7 +19,7 @@
     width: 800,
     height: 520,
     playerRadius: 5,
-    trailWidth: 6,         // bolder "spaghetti" lines (Phase 4 feel pass)
+    trailWidth: 8,         // bolder "spaghetti" lines — easier to read at a glance
     catchRadius: 14,
     speed: 150,            // px / second
     trailMinGap: 3,        // min px between recorded trail points
@@ -94,6 +94,7 @@
       this.dirX = dirX; this.dirY = dirY;
       this.trail = [{ x, y, t: t || 0 }];
       this.fx = { dash: 0, slow: 0, ghost: 0, wide: 0, shrink: 0 }; // power-up effect timers (s)
+      this.handicap = 1; // steady speed multiplier (the browser layer slows the AI on easier levels)
     }
     /** Steer to a new direction (any direction allowed, incl. reversal). */
     setDirection(dx, dy) {
@@ -110,7 +111,7 @@
      *  so the renderer can keep each segment's color persistent.
      *  While ghosting, no trail is recorded (the player goes invisible). */
     advance(dt, cfg, now) {
-      const sp = cfg.speed * this.speedFactor(cfg);
+      const sp = cfg.speed * this.speedFactor(cfg) * (this.handicap || 1);
       const lo = cfg.playerRadius, hiX = cfg.width - cfg.playerRadius, hiY = cfg.height - cfg.playerRadius;
       let nx = this.x + this.dirX * sp * dt;
       let ny = this.y + this.dirY * sp * dt;

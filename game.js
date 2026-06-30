@@ -21,7 +21,10 @@
 
   // ---------- settings (start-screen selectable) ----------
   // opponent: 'cpu' (vs computer) | 'local' (two players, one keyboard) | 'online'
-  const settings = { opponent: 'cpu', difficulty: 'medium', speed: 'normal', gameMode: 'classic', radar: true, theme: 'boulder', tiltSens: 'med' };
+  const settings = { opponent: 'cpu', difficulty: 'easy', speed: 'normal', gameMode: 'classic', radar: true, theme: 'boulder', tiltSens: 'med' };
+  // AI speed handicap by difficulty — slowing the chaser is the most reliable way
+  // to let a casual player escape (and to make the AI runner easy to catch).
+  const AI_HANDICAP = { easy: 0.85, medium: 0.95, hard: 1 };
   try { const sv = localStorage.getItem('arcadeTagTheme'); if (sv) settings.theme = sv; } catch (e) {}
   try { const rv = localStorage.getItem('arcadeTagRadar'); if (rv !== null) settings.radar = rv === '1'; } catch (e) {}
   // Restore the player's last choices so the menu opens where they left off.
@@ -1107,11 +1110,6 @@
       drawButton('⌖ ' + t('tilt'), 102, 76, 104, 24, tilt.active, () => { tilt.active ? disableTilt() : enableTilt(); });
       if (tilt.active) drawButton(t(sensKey()), 102, 104, 104, 24, false, cycleSens);
     }
-    // More games by Tsemach — cross-links to the sibling arcade games
-    drawButton('↗ River Raid', canvas.width / 2 - 84, 502, 150, 18, false,
-      () => { try { window.open('https://tsemachh.github.io/river-raid/', '_blank'); } catch (e) {} });
-    drawButton('↗ Xonix', canvas.width / 2 + 78, 502, 110, 18, false,
-      () => { try { window.open('https://tsemachh.github.io/xonix/', '_blank'); } catch (e) {} });
   }
 
   /** First-run (or '?'-triggered) how-to-play overlay drawn over the menu. */
@@ -1444,6 +1442,8 @@
   }
 
   function driveAI(dt) {
+    const hc = AI_HANDICAP[settings.difficulty] || 1; // apply every frame so it survives round resets
+    for (let i = 1; i < game.players.length; i++) game.players[i].handicap = hc;
     aiTimer -= dt;
     if (aiTimer > 0) return;
     const preset = PRESETS[settings.difficulty];

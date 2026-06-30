@@ -20,8 +20,10 @@
 
   /** Difficulty presets: reaction cadence (s) + steering overrides. */
   const PRESETS = {
-    easy:   { interval: 0.28, ai: { leadTimeMax: 0.15, jitter: 0.4 } },
-    medium: { interval: 0.12, ai: {} },
+    // easy is the default — slow reactions, no lead prediction, lots of jitter,
+    // so the chaser wanders and a casual player can shake it off.
+    easy:   { interval: 0.34, ai: { leadTimeMax: 0.0, jitter: 0.6 } },
+    medium: { interval: 0.16, ai: { leadTimeMax: 0.4, jitter: 0.18 } },
     hard:   { interval: 0.05, ai: { leadTimeMax: 0.9, jitter: 0.05 } },
   };
 
