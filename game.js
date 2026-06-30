@@ -1107,6 +1107,11 @@
       drawButton('⌖ ' + t('tilt'), 102, 76, 104, 24, tilt.active, () => { tilt.active ? disableTilt() : enableTilt(); });
       if (tilt.active) drawButton(t(sensKey()), 102, 104, 104, 24, false, cycleSens);
     }
+    // More games by Tsemach — cross-links to the sibling arcade games
+    drawButton('↗ River Raid', canvas.width / 2 - 84, 502, 150, 18, false,
+      () => { try { window.open('https://tsemachh.github.io/river-raid/', '_blank'); } catch (e) {} });
+    drawButton('↗ Xonix', canvas.width / 2 + 78, 502, 110, 18, false,
+      () => { try { window.open('https://tsemachh.github.io/xonix/', '_blank'); } catch (e) {} });
   }
 
   /** First-run (or '?'-triggered) how-to-play overlay drawn over the menu. */
