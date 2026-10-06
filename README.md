@@ -1,6 +1,6 @@
 # Arcade Tag (תופסת ארקייד)
 
-**Play it live: https://tsemachh.github.io/arcade-tag/**
+**Play it live: https://games.tsemach.dev/arcade-tag/**
 
 ![Arcade Tag gameplay — the white-ringed chaser runs down the runner, leaving rainbow trails, ending in a catch](gameplay.gif)
 
